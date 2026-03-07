@@ -1,0 +1,19 @@
+{
+  "name": "diary_back",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Backend API for diary AI rewrite",
+  "main": "src/server.js",
+  "scripts": {
+    "build": "node --check src/server.js",
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2"
+  }
+}
