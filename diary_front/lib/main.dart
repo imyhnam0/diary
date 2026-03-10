@@ -2070,6 +2070,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         return;
       }
 
+      await _deleteUserStorageData();
+      await _deleteUserFirestoreData();
       await user.delete();
 
       if (!mounted) return;
@@ -2092,6 +2094,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               'An error occurred while deleting your account. Please try again.',
             );
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } on FirebaseException {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              '계정 데이터 삭제 중 오류가 발생했습니다. 다시 시도해주세요.',
+              'An error occurred while deleting account data. Please try again.',
+            ),
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2104,6 +2118,65 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           ),
         ),
       );
+    }
+  }
+
+  Future<void> _deleteUserFirestoreData() async {
+    final userCollection = FirebaseFirestore.instance.collection(widget.userEmail);
+    while (true) {
+      final snapshot = await userCollection.limit(300).get();
+      if (snapshot.docs.isEmpty) break;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+
+    // 문의 데이터도 사용자 이메일 기준으로 함께 정리.
+    while (true) {
+      final inquirySnapshot = await FirebaseFirestore.instance
+          .collection('inquiry')
+          .where('email', isEqualTo: widget.userEmail)
+          .limit(300)
+          .get();
+      if (inquirySnapshot.docs.isEmpty) break;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in inquirySnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+  }
+
+  Future<void> _deleteUserStorageData() async {
+    final safeEmail = widget.userEmail.replaceAll(RegExp(r'[^\w@.-]'), '_');
+    final targets = <String>{
+      widget.userEmail,
+      'diaries/${widget.userEmail}',
+      'diaries/$safeEmail',
+    };
+    for (final path in targets) {
+      await _deleteStorageFolderRecursively(
+        FirebaseStorage.instance.ref().child(path),
+      );
+    }
+  }
+
+  Future<void> _deleteStorageFolderRecursively(Reference folderRef) async {
+    try {
+      final result = await folderRef.listAll();
+      for (final item in result.items) {
+        try {
+          await item.delete();
+        } catch (_) {}
+      }
+      for (final prefix in result.prefixes) {
+        await _deleteStorageFolderRecursively(prefix);
+      }
+    } on FirebaseException catch (e) {
+      if (e.code == 'object-not-found') return;
+      rethrow;
     }
   }
 
