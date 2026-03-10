@@ -1748,6 +1748,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                 });
               },
             ),
+            const SizedBox(height: 8),
+            _SettingsTile(
+              icon: Icons.person_remove_alt_1_rounded,
+              label: tr('계정 탈퇴', 'Delete Account'),
+              color: const Color(0xFFDC2626),
+              onTap: () {
+                Navigator.of(sheetCtx).pop();
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) _confirmDeleteAccount();
+                });
+              },
+            ),
           ],
         ),
       ),
@@ -1968,6 +1980,130 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
 
     if (shouldLogout == true) {
       await FirebaseAuth.instance.signOut();
+    }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        const lineColor = Color(0xFFE4E7EC);
+        const panelBg = Color(0xFFFCFCFD);
+        const textMain = Color(0xFF1F2937);
+        const textSub = Color(0xFF8A94A6);
+        const danger = Color(0xFFDC2626);
+
+        return AlertDialog(
+          backgroundColor: panelBg,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: const BorderSide(color: lineColor),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+          contentPadding: const EdgeInsets.fromLTRB(20, 2, 20, 8),
+          actionsPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          title: Row(
+            children: [
+              Icon(Icons.person_remove_alt_1_rounded, size: 18, color: danger),
+              SizedBox(width: 6),
+              Text(
+                tr('계정 탈퇴', 'Delete Account'),
+                style: TextStyle(
+                  color: textMain,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            tr(
+              '정말로 계정을 탈퇴하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
+              'Are you sure you want to delete your account?\nThis action cannot be undone.',
+            ),
+            style: TextStyle(
+              color: textSub,
+              fontSize: 14,
+              height: 1.35,
+            ),
+          ),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: textSub,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(tr('취소', 'Cancel')),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: danger,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(tr('탈퇴', 'Delete')),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldDelete != true) return;
+
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              tr('로그인 정보를 찾을 수 없습니다.', 'No signed-in user found.'),
+            ),
+          ),
+        );
+        return;
+      }
+
+      await user.delete();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr('계정이 삭제되었습니다.', 'Your account has been deleted.'),
+          ),
+        ),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      final message = e.code == 'requires-recent-login'
+          ? tr(
+              '보안을 위해 다시 로그인 후 탈퇴해주세요.',
+              'For security, please sign in again and try deleting your account.',
+            )
+          : tr(
+              '계정 탈퇴 중 오류가 발생했습니다. 다시 시도해주세요.',
+              'An error occurred while deleting your account. Please try again.',
+            );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            tr(
+              '계정 탈퇴 중 오류가 발생했습니다. 다시 시도해주세요.',
+              'An error occurred while deleting your account. Please try again.',
+            ),
+          ),
+        ),
+      );
     }
   }
 
