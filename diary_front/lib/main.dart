@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -89,7 +90,9 @@ class DiaryApp extends StatelessWidget {
             useMaterial3: true,
             colorScheme: colorScheme,
             scaffoldBackgroundColor: Colors.white,
-            textTheme: GoogleFonts.notoSansKrTextTheme(Theme.of(context).textTheme),
+            textTheme: GoogleFonts.notoSansKrTextTheme(
+              Theme.of(context).textTheme,
+            ),
           ),
           home: firebaseError == null
               ? AuthGate()
@@ -158,9 +161,7 @@ class AuthGate extends StatelessWidget {
           return AuthPage();
         }
 
-        return DiaryHomePage(
-          userEmail: user.email!,
-        );
+        return DiaryHomePage(userEmail: user.email!);
       },
     );
   }
@@ -194,24 +195,19 @@ class _AuthPageState extends State<AuthPage> {
     final confirmPassword = _confirmPasswordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      _showSnackBar(tr(
-        '이메일과 비밀번호를 입력해주세요.',
-        'Please enter your email and password.',
-      ));
+      _showSnackBar(
+        tr('이메일과 비밀번호를 입력해주세요.', 'Please enter your email and password.'),
+      );
       return;
     }
     if (!_isLoginMode && confirmPassword.isEmpty) {
-      _showSnackBar(tr(
-        '비밀번호 확인을 입력해주세요.',
-        'Please enter password confirmation.',
-      ));
+      _showSnackBar(
+        tr('비밀번호 확인을 입력해주세요.', 'Please enter password confirmation.'),
+      );
       return;
     }
     if (!_isLoginMode && password != confirmPassword) {
-      _showSnackBar(tr(
-        '비밀번호가 일치하지 않습니다.',
-        'Passwords do not match.',
-      ));
+      _showSnackBar(tr('비밀번호가 일치하지 않습니다.', 'Passwords do not match.'));
       return;
     }
 
@@ -228,10 +224,7 @@ class _AuthPageState extends State<AuthPage> {
         );
       } else {
         final credential = await FirebaseAuth.instance
-            .createUserWithEmailAndPassword(
-              email: email,
-              password: password,
-            );
+            .createUserWithEmailAndPassword(email: email, password: password);
 
         await profileRef.set({
           'email': email,
@@ -243,10 +236,9 @@ class _AuthPageState extends State<AuthPage> {
     } on FirebaseAuthException catch (e) {
       _showSnackBar(_authErrorMessage(e));
     } catch (_) {
-      _showSnackBar(tr(
-        '로그인 처리 중 오류가 발생했습니다.',
-        'An error occurred during authentication.',
-      ));
+      _showSnackBar(
+        tr('로그인 처리 중 오류가 발생했습니다.', 'An error occurred during authentication.'),
+      );
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -258,9 +250,9 @@ class _AuthPageState extends State<AuthPage> {
     if (!mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _authErrorMessage(FirebaseAuthException e) {
@@ -271,16 +263,17 @@ class _AuthPageState extends State<AuthPage> {
         return tr('가입된 사용자가 없습니다.', 'User not found.');
       case 'wrong-password':
       case 'invalid-credential':
-        return tr(
-          '이메일 또는 비밀번호가 올바르지 않습니다.',
-          'Incorrect email or password.',
-        );
+        return tr('이메일 또는 비밀번호가 올바르지 않습니다.', 'Incorrect email or password.');
       case 'email-already-in-use':
         return tr('이미 가입된 이메일입니다.', 'Email is already registered.');
       case 'weak-password':
-        return tr('비밀번호는 6자 이상이어야 합니다.', 'Password must be at least 6 characters.');
+        return tr(
+          '비밀번호는 6자 이상이어야 합니다.',
+          'Password must be at least 6 characters.',
+        );
       default:
-        return e.message ?? tr('인증 오류가 발생했습니다.', 'Authentication error occurred.');
+        return e.message ??
+            tr('인증 오류가 발생했습니다.', 'Authentication error occurred.');
     }
   }
 
@@ -300,246 +293,290 @@ class _AuthPageState extends State<AuthPage> {
           children: [
             Center(
               child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Column(
-                      children: [
-                        Text(
-                          tr('나의 일기', 'My Diary'),
-                          style: GoogleFonts.nanumPenScript(
-                            color: textMain,
-                            fontSize: 55,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(18),
-                          child: Container(
-                            color: Colors.white,
-                            padding: const EdgeInsets.all(6),
-                            child: Image.asset(
-                              _isLoginMode
-                                  ? 'assets/lLogin.png'
-                                  : 'assets/Register.png',
-                              height: 240,
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
-                    decoration: BoxDecoration(
-                      color: panelBg,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: lineColor),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(
-                      _isLoginMode ? tr('로그인', 'Login') : tr('회원가입', 'Sign Up'),
-                      style: GoogleFonts.nanumPenScript(
-                        color: textMain,
-                        fontSize: 40,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      style: GoogleFonts.gowunDodum(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: tr('이메일', 'Email'),
-                        labelStyle: GoogleFonts.gowunDodum(
-                          color: textSub,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: lineColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: lineColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: accent, width: 1.4),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: true,
-                      style: GoogleFonts.gowunDodum(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: tr('비밀번호', 'Password'),
-                        labelStyle: GoogleFonts.gowunDodum(
-                          color: textSub,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: lineColor),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: lineColor),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: accent, width: 1.4),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
-                    ),
-                    if (!_isLoginMode) ...[
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _confirmPasswordController,
-                        obscureText: true,
-                        style: GoogleFonts.gowunDodum(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: tr('비밀번호 확인', 'Confirm Password'),
-                          labelStyle: GoogleFonts.gowunDodum(
-                            color: textSub,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: lineColor),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: lineColor),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: accent, width: 1.4),
-                          ),
-                          filled: true,
-                          fillColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _isLoading ? null : _submit,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: accent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: Text(
-                          _isLoginMode ? tr('로그인', 'Login') : tr('회원가입', 'Sign Up'),
-                          style: GoogleFonts.nanumPenScript(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: TextButton(
-                              onPressed: _isLoading
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _isLoginMode = !_isLoginMode;
-                                        _confirmPasswordController.clear();
-                                      });
-                                    },
-                              style: TextButton.styleFrom(
-                                foregroundColor: textSub,
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              tr('나의 일기', 'My Diary'),
+                              style: GoogleFonts.nanumPenScript(
+                                color: textMain,
+                                fontSize: 55,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
                               ),
-                              child: Text(
-                                _isLoginMode
-                                    ? tr('계정이 없으신가요? 회원가입', "Don't have an account? Sign up")
-                                    : tr('이미 계정이 있나요? 로그인', 'Already have an account? Login'),
-                                style: GoogleFonts.nanumPenScript(
-                                  fontSize: 15,
-                                  color: textSub,
+                            ),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(18),
+                              child: Container(
+                                color: Colors.white,
+                                padding: const EdgeInsets.all(6),
+                                child: Image.asset(
+                                  _isLoginMode
+                                      ? 'assets/lLogin.png'
+                                      : 'assets/Register.png',
+                                  height: 240,
+                                  fit: BoxFit.contain,
                                 ),
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF3F4F6),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFE4E7EC)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.language_rounded, size: 16, color: textSub),
-                              const SizedBox(width: 6),
-                              _LanguageChip(
-                                selected: !isEnglish,
-                                label: '🇰🇷 한국어',
-                                onTap: () => setAppLanguage(AppLanguage.ko),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+                        decoration: BoxDecoration(
+                          color: panelBg,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: lineColor),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isLoginMode
+                                  ? tr('로그인', 'Login')
+                                  : tr('회원가입', 'Sign Up'),
+                              style: GoogleFonts.nanumPenScript(
+                                color: textMain,
+                                fontSize: 40,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
                               ),
-                              const SizedBox(width: 4),
-                              _LanguageChip(
-                                selected: isEnglish,
-                                label: '🇺🇸 English',
-                                onTap: () => setAppLanguage(AppLanguage.en),
+                            ),
+                            const SizedBox(height: 18),
+                            TextField(
+                              controller: _emailController,
+                              keyboardType: TextInputType.emailAddress,
+                              style: GoogleFonts.gowunDodum(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: tr('이메일', 'Email'),
+                                labelStyle: GoogleFonts.gowunDodum(
+                                  color: textSub,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: lineColor,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: lineColor,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: accent,
+                                    width: 1.4,
+                                  ),
+                                ),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextField(
+                              controller: _passwordController,
+                              obscureText: true,
+                              style: GoogleFonts.gowunDodum(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: tr('비밀번호', 'Password'),
+                                labelStyle: GoogleFonts.gowunDodum(
+                                  color: textSub,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: lineColor,
+                                  ),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: lineColor,
+                                  ),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: const BorderSide(
+                                    color: accent,
+                                    width: 1.4,
+                                  ),
+                                ),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                            ),
+                            if (!_isLoginMode) ...[
+                              const SizedBox(height: 12),
+                              TextField(
+                                controller: _confirmPasswordController,
+                                obscureText: true,
+                                style: GoogleFonts.gowunDodum(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText: tr('비밀번호 확인', 'Confirm Password'),
+                                  labelStyle: GoogleFonts.gowunDodum(
+                                    color: textSub,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: lineColor,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: lineColor,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: accent,
+                                      width: 1.4,
+                                    ),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
                               ),
                             ],
-                          ),
+                            const SizedBox(height: 18),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: _isLoading ? null : _submit,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: accent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  _isLoginMode
+                                      ? tr('로그인', 'Login')
+                                      : tr('회원가입', 'Sign Up'),
+                                  style: GoogleFonts.nanumPenScript(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton(
+                                      onPressed: _isLoading
+                                          ? null
+                                          : () {
+                                              setState(() {
+                                                _isLoginMode = !_isLoginMode;
+                                                _confirmPasswordController
+                                                    .clear();
+                                              });
+                                            },
+                                      style: TextButton.styleFrom(
+                                        foregroundColor: textSub,
+                                      ),
+                                      child: Text(
+                                        _isLoginMode
+                                            ? tr(
+                                                '계정이 없으신가요? 회원가입',
+                                                "Don't have an account? Sign up",
+                                              )
+                                            : tr(
+                                                '이미 계정이 있나요? 로그인',
+                                                'Already have an account? Login',
+                                              ),
+                                        style: GoogleFonts.nanumPenScript(
+                                          fontSize: 15,
+                                          color: textSub,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF3F4F6),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(0xFFE4E7EC),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.language_rounded,
+                                        size: 16,
+                                        color: textSub,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      _LanguageChip(
+                                        selected: !isEnglish,
+                                        label: '🇰🇷 한국어',
+                                        onTap: () =>
+                                            setAppLanguage(AppLanguage.ko),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      _LanguageChip(
+                                        selected: isEnglish,
+                                        label: '🇺🇸 English',
+                                        onTap: () =>
+                                            setAppLanguage(AppLanguage.en),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
           ],
         ),
       ),
@@ -583,10 +620,7 @@ class _LanguageChip extends StatelessWidget {
 }
 
 class DiaryHomePage extends StatefulWidget {
-  const DiaryHomePage({
-    super.key,
-    required this.userEmail,
-  });
+  const DiaryHomePage({super.key, required this.userEmail});
 
   final String userEmail;
 
@@ -595,7 +629,9 @@ class DiaryHomePage extends StatefulWidget {
 }
 
 class _DiaryHomePageState extends State<DiaryHomePage> {
-  static const MethodChannel _widgetChannel = MethodChannel('diary/home_widget');
+  static const MethodChannel _widgetChannel = MethodChannel(
+    'diary/home_widget',
+  );
 
   late DateTime _focusedDay;
   late DateTime _selectedDay;
@@ -616,15 +652,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     _focusedDay = now;
     _selectedDay = _normalizeDate(now);
     _listMonthAnchor = DateTime(now.year, now.month, 1);
-    _ensureAssetsCached().then((_) { if (mounted) setState(() {}); });
+    _ensureAssetsCached().then((_) {
+      if (mounted) setState(() {});
+    });
     _loadCustomMoods();
   }
 
   Future<void> _loadCustomMoods() async {
     try {
       final doc = await _userCollection.doc('_custom_moods').get();
-      if (!doc.exists || !mounted) return;
-      final moods = (doc.data()?['moods'] as List<dynamic>?) ?? [];
+      final moods = doc.exists
+          ? ((doc.data()?['moods'] as List<dynamic>?) ?? <dynamic>[])
+          : <dynamic>[];
       final seenKeys = <String>{};
       final seenUrls = <String>{};
       final uniqueMoodRows = <Map<String, dynamic>>[];
@@ -635,7 +674,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         final key = (moodData['key'] ?? '').toString();
         final storageUrl = (moodData['storageUrl'] ?? '').toString();
         final storagePath = (moodData['storagePath'] ?? '').toString();
-        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty)) continue;
+        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty))
+          continue;
         if (seenKeys.contains(key) || seenUrls.contains(storageUrl)) continue;
         seenKeys.add(key);
         if (storageUrl.isNotEmpty) seenUrls.add(storageUrl);
@@ -644,6 +684,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           'storageUrl': storageUrl,
           'storagePath': storagePath,
         });
+      }
+      var usedStorageFallback = false;
+      if (uniqueMoodRows.isEmpty) {
+        uniqueMoodRows.addAll(await _listMoodRowsFromStorage(widget.userEmail));
+        usedStorageFallback = uniqueMoodRows.isNotEmpty;
       }
 
       final loadedOptions = <MoodOption>[];
@@ -670,15 +715,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
             'storageUrl': storageUrl,
             'storagePath': ref.fullPath,
           });
-          loadedOptions.add(MoodOption.custom(
-            key: key,
-            label: tr('커스텀', 'Custom'),
-            customIconBytes: bytes,
-          ));
+          loadedOptions.add(
+            MoodOption.custom(
+              key: key,
+              label: tr('커스텀', 'Custom'),
+              customIconBytes: bytes,
+            ),
+          );
         } catch (_) {}
       }
 
-      if (cleanedRows.length != moods.length) {
+      if (cleanedRows.isNotEmpty &&
+          (usedStorageFallback || cleanedRows.length != moods.length || !doc.exists)) {
         await _userCollection.doc('_custom_moods').set({'moods': cleanedRows});
       }
       if (!mounted) return;
@@ -695,7 +743,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   }
 
   bool _canDeleteCustomMood(String key) {
-    return !_isBuiltInMood(key) && _customMoodOptions.any((mood) => mood.key == key);
+    return !_isBuiltInMood(key) &&
+        _customMoodOptions.any((mood) => mood.key == key);
   }
 
   String _widgetEmojiFromDiaryData(Map<String, dynamic> data) {
@@ -808,10 +857,19 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('widget_today_emoji', todayEmoji);
       await prefs.setString('widget_today_image_base64', todayImage);
-      await prefs.setString('widget_recent_emojis_json', jsonEncode(recentEmojis));
-      await prefs.setString('widget_recent_images_json', jsonEncode(recentImages));
+      await prefs.setString(
+        'widget_recent_emojis_json',
+        jsonEncode(recentEmojis),
+      );
+      await prefs.setString(
+        'widget_recent_images_json',
+        jsonEncode(recentImages),
+      );
       await prefs.setString('widget_month_key', monthKey);
-      await prefs.setString('widget_month_map_json', jsonEncode(monthEmojiByDay));
+      await prefs.setString(
+        'widget_month_map_json',
+        jsonEncode(monthEmojiByDay),
+      );
       await prefs.setString(
         'widget_month_map_images_json',
         jsonEncode(monthImageByDay),
@@ -882,7 +940,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         try {
           await FirebaseStorage.instance
               .ref()
-              .child('${widget.userEmail}/mood_icons/$key.jpg')
+              .child('${widget.userEmail}/mood_icons/$key.png')
               .delete();
         } catch (_) {}
       }
@@ -947,17 +1005,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               '이 커스텀 아이콘을 삭제할까요?\n삭제 후 복구할 수 없습니다.',
               'Delete this custom icon?\nThis action cannot be undone.',
             ),
-            style: const TextStyle(
-              color: textSub,
-              fontSize: 14,
-              height: 1.4,
-            ),
+            style: const TextStyle(color: textSub, fontSize: 14, height: 1.4),
           ),
           actions: [
             TextButton(
               style: TextButton.styleFrom(
                 foregroundColor: textSub,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               onPressed: () => Navigator.of(dialogCtx).pop(false),
               child: Text(tr('취소', 'Cancel')),
@@ -966,7 +1023,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               style: FilledButton.styleFrom(
                 backgroundColor: danger,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -983,14 +1043,14 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     onDeleted?.call();
   }
 
-  Future<void> _saveCustomMoodToStorage(String key, Uint8List bytes) async {
+  Future<bool> _saveCustomMoodToStorage(String key, Uint8List bytes) async {
     try {
       final ref = FirebaseStorage.instance
           .ref()
           .child(widget.userEmail)
           .child('mood_icons')
-          .child('$key.jpg');
-      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+          .child('$key.png');
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/png'));
       final url = await ref.getDownloadURL();
       final storagePath = ref.fullPath;
       final docRef = _userCollection.doc('_custom_moods');
@@ -1001,13 +1061,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
 
       final merged = <Map<String, dynamic>>[
         for (final raw in existing)
-          if (raw is Map)
-            raw.map((k, v) => MapEntry(k.toString(), v)),
-        {
-          'key': key,
-          'storageUrl': url,
-          'storagePath': storagePath,
-        },
+          if (raw is Map) raw.map((k, v) => MapEntry(k.toString(), v)),
+        {'key': key, 'storageUrl': url, 'storagePath': storagePath},
       ];
 
       final seenKeys = <String>{};
@@ -1028,20 +1083,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         });
       }
 
-      await docRef.set({
-        'moods': dedupedReversed.reversed.toList(),
-      });
-    } catch (_) {}
+      await docRef.set({'moods': dedupedReversed.reversed.toList()});
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   CollectionReference<Map<String, dynamic>> get _userCollection {
     return FirebaseFirestore.instance.collection(widget.userEmail);
   }
 
-  Future<void> _openEditPage(
-    String docId,
-    Map<String, dynamic> data,
-  ) async {
+  Future<void> _openEditPage(String docId, Map<String, dynamic> data) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => NewDiaryPage(
@@ -1052,8 +1105,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           initialMoodKey: (data['moodKey'] ?? '').toString(),
           initialMoodCustomBase64:
               (data['moodCustomIcon'] ?? '').toString().isEmpty
-                  ? null
-                  : data['moodCustomIcon'].toString(),
+              ? null
+              : data['moodCustomIcon'].toString(),
           docId: docId,
           initialTitle: (data['title'] ?? '').toString(),
           initialContentBlocks: _contentBlocksFromData(data),
@@ -1176,7 +1229,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     );
   }
 
-  Future<void> _showDiaryActionSheet(String docId, Map<String, dynamic> data) async {
+  Future<void> _showDiaryActionSheet(
+    String docId,
+    Map<String, dynamic> data,
+  ) async {
     await showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -1206,7 +1262,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Color(0xFFEF4444),
+                ),
                 title: Text(
                   tr('삭제하기', 'Delete'),
                   style: const TextStyle(color: Color(0xFFEF4444)),
@@ -1256,12 +1315,17 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(tr('삭제 중 오류가 발생했습니다.', 'Failed to delete diary.'))),
+        SnackBar(
+          content: Text(tr('삭제 중 오류가 발생했습니다.', 'Failed to delete diary.')),
+        ),
       );
     }
   }
 
-  Future<void> _confirmDeleteDiary(String docId, Map<String, dynamic> data) async {
+  Future<void> _confirmDeleteDiary(
+    String docId,
+    Map<String, dynamic> data,
+  ) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogCtx) {
@@ -1312,17 +1376,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               '이 일기를 삭제할까요?\n일기 내용과 연결된 사진도 함께 삭제됩니다.',
               'Delete this diary?\nAttached photos will be deleted too.',
             ),
-            style: const TextStyle(
-              color: textSub,
-              fontSize: 14,
-              height: 1.4,
-            ),
+            style: const TextStyle(color: textSub, fontSize: 14, height: 1.4),
           ),
           actions: [
             TextButton(
               style: TextButton.styleFrom(
                 foregroundColor: textSub,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               onPressed: () => Navigator.of(dialogCtx).pop(false),
               child: Text(tr('취소', 'Cancel')),
@@ -1331,7 +1394,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               style: FilledButton.styleFrom(
                 backgroundColor: danger,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -1355,13 +1421,185 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       MaterialPageRoute(
         builder: (_) => NewDiaryPage(
           userEmail: widget.userEmail,
-          // 새 일기 작성은 항상 오늘 날짜로 시작
-          initialDate: _normalizeDate(DateTime.now()),
+          // 달력에서 고른 날짜를 기본 작성일로 사용
+          initialDate: _selectedDay,
           initialMoodKey: initialMoodKey,
           initialMoodCustomBase64: initialMoodCustomBase64,
         ),
       ),
     );
+  }
+
+  Future<void> _openListMonthYearPicker() async {
+    final minYear = 2000;
+    final maxYear = 2100;
+    var tempYear = _listMonthAnchor.year;
+    var tempMonth = _listMonthAnchor.month;
+    final yearController = FixedExtentScrollController(
+      initialItem: tempYear - minYear,
+    );
+    final monthController = FixedExtentScrollController(
+      initialItem: tempMonth - 1,
+    );
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: const Color(0xFFF7F7F8),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final preview = DateTime(tempYear, tempMonth, 1);
+            final title = isEnglish
+                ? '${preview.year} ${preview.month}'
+                : '${preview.year}년 ${preview.month}월';
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF3B3B3B),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 180,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          IgnorePointer(
+                            child: Container(
+                              height: 34,
+                              margin: const EdgeInsets.symmetric(horizontal: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0F1F2),
+                                borderRadius: BorderRadius.circular(9),
+                              ),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: CupertinoPicker(
+                                  scrollController: yearController,
+                                  itemExtent: 42,
+                                  selectionOverlay: const SizedBox.shrink(),
+                                  onSelectedItemChanged: (index) {
+                                    setSheetState(() {
+                                      tempYear = minYear + index;
+                                    });
+                                  },
+                                  children: [
+                                    for (int y = minYear; y <= maxYear; y++)
+                                      Center(
+                                        child: Text(
+                                          isEnglish ? '$y' : '${y}년',
+                                          style: const TextStyle(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: CupertinoPicker(
+                                  scrollController: monthController,
+                                  itemExtent: 42,
+                                  selectionOverlay: const SizedBox.shrink(),
+                                  onSelectedItemChanged: (index) {
+                                    setSheetState(() {
+                                      tempMonth = index + 1;
+                                    });
+                                  },
+                                  children: [
+                                    for (int m = 1; m <= 12; m++)
+                                      Center(
+                                        child: Text(
+                                          isEnglish ? '$m' : '${m}월',
+                                          style: const TextStyle(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton.tonal(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFFEBEBED),
+                              foregroundColor: const Color(0xFF4A4A4A),
+                              minimumSize: const Size.fromHeight(44),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                            ),
+                            onPressed: () =>
+                                Navigator.of(sheetContext).pop(false),
+                            child: Text(tr('취소', 'Cancel')),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: const Color(0xFF4A4A4A),
+                              minimumSize: const Size.fromHeight(44),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                side: const BorderSide(
+                                  color: Color(0xFFE1E1E1),
+                                ),
+                              ),
+                            ),
+                            onPressed: () =>
+                                Navigator.of(sheetContext).pop(true),
+                            child: Text(tr('확인', 'Done')),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _listMonthAnchor = DateTime(tempYear, tempMonth, 1);
+      final lastDay = DateTime(tempYear, tempMonth + 1, 0).day;
+      final selectedDay = _selectedDay.day.clamp(1, lastDay).toInt();
+      _selectedDay = DateTime(tempYear, tempMonth, selectedDay);
+      _focusedDay = _selectedDay;
+    });
   }
 
   Future<void> _openMoodPickerAndWrite() async {
@@ -1420,11 +1658,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                               },
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: const Color(0xFF4B5563),
-                                side: const BorderSide(color: Color(0xFFD1D5DB)),
+                                side: const BorderSide(
+                                  color: Color(0xFFD1D5DB),
+                                ),
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 8),
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
                                 shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                               icon: Icon(
                                 deleteMode
@@ -1433,7 +1676,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                 size: 16,
                               ),
                               label: Text(
-                                deleteMode ? tr('완료', 'Done') : tr('삭제', 'Delete'),
+                                deleteMode
+                                    ? tr('완료', 'Done')
+                                    : tr('삭제', 'Delete'),
                                 style: const TextStyle(fontSize: 13),
                               ),
                             ),
@@ -1458,19 +1703,39 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                 selectedTabIndex = 1;
                                 deleteMode = false;
                               });
-                              _saveCustomMoodToStorage(key, customBytes);
+                              final saved = await _saveCustomMoodToStorage(
+                                key,
+                                customBytes,
+                              );
+                              if (!saved && mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      tr(
+                                        '아이콘 저장 정보 동기화에 실패했어요. 다시 시도해주세요.',
+                                        'Failed to sync icon metadata. Please try again.',
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }
                             },
                             style: FilledButton.styleFrom(
                               backgroundColor: const Color(0xFF1E1E1E),
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12)),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                             icon: const Icon(Icons.add_rounded, size: 16),
-                            label: Text(tr('아이콘 추가', 'Add Icon'),
-                                style: const TextStyle(fontSize: 13)),
+                            label: Text(
+                              tr('아이콘 추가', 'Add Icon'),
+                              style: const TextStyle(fontSize: 13),
+                            ),
                           ),
                         ],
                       ),
@@ -1526,15 +1791,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                               itemCount: visibleMoods.length,
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                mainAxisSpacing: 14,
-                                crossAxisSpacing: 8,
-                                childAspectRatio: 1.05,
-                              ),
+                                    crossAxisCount: 3,
+                                    mainAxisSpacing: 14,
+                                    crossAxisSpacing: 8,
+                                    childAspectRatio: 1.05,
+                                  ),
                               itemBuilder: (context, index) {
                                 final mood = visibleMoods[index];
                                 final canDelete =
-                                    selectedTabIndex == 1 && _canDeleteCustomMood(mood.key);
+                                    selectedTabIndex == 1 &&
+                                    _canDeleteCustomMood(mood.key);
                                 return Stack(
                                   children: [
                                     Positioned.fill(
@@ -1542,9 +1808,14 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                         borderRadius: BorderRadius.circular(14),
                                         onTap: deleteMode
                                             ? null
-                                            : () => Navigator.of(sheetContext).pop(mood.key),
+                                            : () => Navigator.of(
+                                                sheetContext,
+                                              ).pop(mood.key),
                                         child: Center(
-                                          child: _buildMoodAsset(mood, size: 56),
+                                          child: _buildMoodAsset(
+                                            mood,
+                                            size: 56,
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -1555,15 +1826,20 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                         child: Material(
                                           color: Colors.transparent,
                                           child: InkWell(
-                                            borderRadius: BorderRadius.circular(99),
+                                            borderRadius: BorderRadius.circular(
+                                              99,
+                                            ),
                                             onTap: () async {
                                               await _confirmDeleteCustomMood(
                                                 mood,
                                                 onDeleted: () {
                                                   setSheetState(() {
-                                                    sheetCustomMoodOptions.removeWhere(
-                                                      (item) => item.key == mood.key,
-                                                    );
+                                                    sheetCustomMoodOptions
+                                                        .removeWhere(
+                                                          (item) =>
+                                                              item.key ==
+                                                              mood.key,
+                                                        );
                                                   });
                                                 },
                                               );
@@ -1604,7 +1880,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     if (!mounted || pickedKey == null) return;
 
     final mood = _moodByKey[pickedKey];
-    final customBase64 = mood?.customIconBase64 ??
+    final customBase64 =
+        mood?.customIconBase64 ??
         (mood?.customIconBytes != null
             ? base64Encode(mood!.customIconBytes!)
             : null);
@@ -1620,8 +1897,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     required bool selected,
     required VoidCallback onTap,
   }) {
-    final textColor =
-        selected ? const Color(0xFF111827) : const Color(0xFF9CA3AF);
+    final textColor = selected
+        ? const Color(0xFF111827)
+        : const Color(0xFF9CA3AF);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
@@ -1669,7 +1947,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: const Color(0xFFD4D7DD),
                 borderRadius: BorderRadius.circular(99),
@@ -1678,8 +1957,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
             const SizedBox(height: 20),
             Align(
               alignment: Alignment.centerLeft,
-              child: Text(tr('설정', 'Settings'), style: TextStyle(
-                fontSize: 18, fontWeight: FontWeight.w700)),
+              child: Text(
+                tr('설정', 'Settings'),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
             ),
             const SizedBox(height: 16),
             Container(
@@ -1690,7 +1971,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.language_rounded, size: 20, color: Color(0xFF1F2937)),
+                  const Icon(
+                    Icons.language_rounded,
+                    size: 20,
+                    color: Color(0xFF1F2937),
+                  ),
                   const SizedBox(width: 12),
                   Text(
                     tr('언어', 'Language'),
@@ -1841,7 +2126,12 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                         ),
                         hintStyle: const TextStyle(color: Color(0xFF9CA3AF)),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          12,
+                          12,
+                          12,
+                          10,
+                        ),
                       ),
                     ),
                   ),
@@ -1864,7 +2154,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               TextButton(
                 style: TextButton.styleFrom(
                   foregroundColor: textSub,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                 ),
                 onPressed: () => Navigator.pop(dialogContext),
                 child: Text(tr('취소', 'Cancel')),
@@ -1873,9 +2166,13 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                 style: FilledButton.styleFrom(
                   backgroundColor: accent,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 9,
+                  ),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 onPressed: inquiryText.trim().isEmpty
                     ? null
@@ -1883,20 +2180,36 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                         final text = inquiryText.trim();
                         Navigator.of(dialogContext).pop();
                         try {
-                          await FirebaseFirestore.instance.collection('inquiry').add({
-                            'email': widget.userEmail,
-                            'content': text,
-                            'createdAt': FieldValue.serverTimestamp(),
-                          });
+                          await FirebaseFirestore.instance
+                              .collection('inquiry')
+                              .add({
+                                'email': widget.userEmail,
+                                'content': text,
+                                'createdAt': FieldValue.serverTimestamp(),
+                              });
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(tr('문의가 접수되었습니다. 감사합니다!', 'Your inquiry has been submitted. Thank you!'))),
+                              SnackBar(
+                                content: Text(
+                                  tr(
+                                    '문의가 접수되었습니다. 감사합니다!',
+                                    'Your inquiry has been submitted. Thank you!',
+                                  ),
+                                ),
+                              ),
                             );
                           }
                         } catch (_) {
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(tr('전송 중 오류가 발생했습니다. 다시 시도해주세요.', 'An error occurred while sending. Please try again.'))),
+                              SnackBar(
+                                content: Text(
+                                  tr(
+                                    '전송 중 오류가 발생했습니다. 다시 시도해주세요.',
+                                    'An error occurred while sending. Please try again.',
+                                  ),
+                                ),
+                              ),
                             );
                           }
                         }
@@ -1946,17 +2259,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           ),
           content: Text(
             tr('로그아웃 하시겠습니까?', 'Do you want to log out?'),
-            style: TextStyle(
-              color: textSub,
-              fontSize: 14,
-              height: 1.35,
-            ),
+            style: TextStyle(color: textSub, fontSize: 14, height: 1.35),
           ),
           actions: [
             TextButton(
               style: TextButton.styleFrom(
                 foregroundColor: textSub,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
               ),
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: Text(tr('아니오', 'No')),
@@ -1965,7 +2277,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -2022,17 +2337,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               '정말로 계정을 탈퇴하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
               'Are you sure you want to delete your account?\nThis action cannot be undone.',
             ),
-            style: TextStyle(
-              color: textSub,
-              fontSize: 14,
-              height: 1.35,
-            ),
+            style: TextStyle(color: textSub, fontSize: 14, height: 1.35),
           ),
           actions: [
             TextButton(
               style: TextButton.styleFrom(
                 foregroundColor: textSub,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
               ),
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: Text(tr('취소', 'Cancel')),
@@ -2041,7 +2355,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               style: FilledButton.styleFrom(
                 backgroundColor: danger,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -2062,9 +2379,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              tr('로그인 정보를 찾을 수 없습니다.', 'No signed-in user found.'),
-            ),
+            content: Text(tr('로그인 정보를 찾을 수 없습니다.', 'No signed-in user found.')),
           ),
         );
         return;
@@ -2077,9 +2392,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            tr('계정이 삭제되었습니다.', 'Your account has been deleted.'),
-          ),
+          content: Text(tr('계정이 삭제되었습니다.', 'Your account has been deleted.')),
         ),
       );
     } on FirebaseAuthException catch (e) {
@@ -2093,7 +2406,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               '계정 탈퇴 중 오류가 발생했습니다. 다시 시도해주세요.',
               'An error occurred while deleting your account. Please try again.',
             );
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } on FirebaseException {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2122,7 +2437,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   }
 
   Future<void> _deleteUserFirestoreData() async {
-    final userCollection = FirebaseFirestore.instance.collection(widget.userEmail);
+    final userCollection = FirebaseFirestore.instance.collection(
+      widget.userEmail,
+    );
     while (true) {
       final snapshot = await userCollection.limit(300).get();
       if (snapshot.docs.isEmpty) break;
@@ -2188,7 +2505,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         backgroundColor: const Color(0xFF1E1E1E),
         foregroundColor: Colors.white,
         icon: const Icon(Icons.edit_rounded),
-        label: Text(tr('일기 작성', 'Write Diary'), style: GoogleFonts.nanumPenScript(fontSize: 16)),
+        label: Text(
+          tr('일기 작성', 'Write Diary'),
+          style: GoogleFonts.nanumPenScript(fontSize: 16),
+        ),
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _userCollection
@@ -2196,7 +2516,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Center(child: Text(tr('일기 데이터를 불러오지 못했습니다.', 'Failed to load diary data.')));
+            return Center(
+              child: Text(
+                tr('일기 데이터를 불러오지 못했습니다.', 'Failed to load diary data.'),
+              ),
+            );
           }
 
           if (!snapshot.hasData) {
@@ -2240,8 +2564,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                         isSelected: _isListMode,
                         onTap: () => setState(() {
                           _isListMode = true;
-                          _listMonthAnchor =
-                              DateTime(_focusedDay.year, _focusedDay.month, 1);
+                          _listMonthAnchor = DateTime(
+                            _focusedDay.year,
+                            _focusedDay.month,
+                            1,
+                          );
                         }),
                       ),
                       const SizedBox(width: 6),
@@ -2270,8 +2597,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                           final cellWidth = constraints.maxWidth / 7;
                           final rowHeight = cellWidth.clamp(34.0, 42.0);
                           final emojiSize = math.min(rowHeight * 0.78, 32.0);
-                          final dayTextSize =
-                              (rowHeight * 0.30).clamp(12.0, 15.0);
+                          final dayTextSize = (rowHeight * 0.30).clamp(
+                            12.0,
+                            15.0,
+                          );
 
                           return TableCalendar<DateTime>(
                             firstDay: DateTime(2000, 1, 1),
@@ -2317,7 +2646,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                               headerTitleBuilder: (context, day) {
                                 return Center(
                                   child: Text(
-                                    isEnglish ? '${day.month}' : '${day.month}월',
+                                    isEnglish
+                                        ? '${day.month}'
+                                        : '${day.month}월',
                                     style: GoogleFonts.nanumPenScript(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 24,
@@ -2327,7 +2658,15 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                               },
                               dowBuilder: (context, day) {
                                 final labels = isEnglish
-                                    ? const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                                    ? const [
+                                        'Sun',
+                                        'Mon',
+                                        'Tue',
+                                        'Wed',
+                                        'Thu',
+                                        'Fri',
+                                        'Sat',
+                                      ]
                                     : const ['일', '월', '화', '수', '목', '금', '토'];
                                 final label = labels[day.weekday % 7];
                                 return Center(
@@ -2435,10 +2774,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     );
   }
 
-  Widget _buildMoodAsset(
-    MoodOption mood, {
-    required double size,
-  }) {
+  Widget _buildMoodAsset(MoodOption mood, {required double size}) {
     if (mood.customIconBytes != null) {
       return ClipOval(
         child: Image.memory(
@@ -2464,7 +2800,12 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     }
     final cachedBytes = _globalAssetCache[mood.key];
     if (cachedBytes != null) {
-      return Image.memory(cachedBytes, width: size, height: size, fit: BoxFit.contain);
+      return Image.memory(
+        cachedBytes,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+      );
     }
     if (mood.assetPath.isNotEmpty) {
       return Image.asset(
@@ -2476,10 +2817,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
             Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
       );
     }
-    return Text(
-      mood.fallbackEmoji,
-      style: TextStyle(fontSize: size * 0.8),
-    );
+    return Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8));
   }
 
   MoodOption? _resolveMoodFromDiary(Map<String, dynamic> data) {
@@ -2640,7 +2978,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         const SizedBox(height: 10),
         Expanded(
           child: monthFiltered.isEmpty
-              ? Center(child: Text(tr('해당 달에 작성된 일기가 없습니다.', 'No diaries in this month.')))
+              ? Center(
+                  child: Text(
+                    tr('해당 달에 작성된 일기가 없습니다.', 'No diaries in this month.'),
+                  ),
+                )
               : ListView.separated(
                   padding: const EdgeInsets.only(bottom: 8),
                   itemCount: monthFiltered.length,
@@ -2654,7 +2996,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                       fallback: (data['content'] ?? '').toString(),
                     );
                     final mood = _resolveMoodFromDiary(data);
-                    final imageUrl = _firstImageUrlFromBlocks(blocks) ??
+                    final imageUrl =
+                        _firstImageUrlFromBlocks(blocks) ??
                         (data['imageUrl'] ?? '').toString();
                     final ts = data['writtenAt'];
                     final dateText = ts is Timestamp
@@ -2662,114 +3005,124 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                         : '';
 
                     final weekdays = isEnglish
-                        ? const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                        ? const [
+                            'Mon',
+                            'Tue',
+                            'Wed',
+                            'Thu',
+                            'Fri',
+                            'Sat',
+                            'Sun',
+                          ]
                         : const ['월', '화', '수', '목', '금', '토', '일'];
                     final dateWithWeekday = ts is Timestamp
                         ? (isEnglish
-                            ? '$dateText ${weekdays[ts.toDate().weekday - 1]}'
-                            : '$dateText ${weekdays[ts.toDate().weekday - 1]}요일')
+                              ? '$dateText ${weekdays[ts.toDate().weekday - 1]}'
+                              : '$dateText ${weekdays[ts.toDate().weekday - 1]}요일')
                         : dateText;
 
                     final docId = monthFiltered[index].id;
                     return Stack(
                       children: [
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (mood != null) ...[
-                            _buildMoodAsset(mood, size: 64),
-                            const SizedBox(height: 10),
-                          ],
-                          if (dateWithWeekday.isNotEmpty)
-                            Text(
-                              dateWithWeekday,
-                              style: GoogleFonts.nanumPenScript(
-                                fontSize: 13,
-                                color: const Color(0xFF9CA3AF),
-                                fontWeight: FontWeight.w600,
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (mood != null) ...[
+                                _buildMoodAsset(mood, size: 64),
+                                const SizedBox(height: 10),
+                              ],
+                              if (dateWithWeekday.isNotEmpty)
+                                Text(
+                                  dateWithWeekday,
+                                  style: GoogleFonts.nanumPenScript(
+                                    fontSize: 13,
+                                    color: const Color(0xFF9CA3AF),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              const SizedBox(height: 6),
+                              Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.nanumPenScript(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 17,
+                                  color: const Color(0xFF111827),
+                                ),
                               ),
-                            ),
-                          const SizedBox(height: 6),
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.nanumPenScript(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 17,
-                              color: const Color(0xFF111827),
-                            ),
+                              if (content.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  content,
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.nanumPenScript(
+                                    fontSize: 14,
+                                    height: 1.5,
+                                    color: const Color(0xFF4B5563),
+                                  ),
+                                ),
+                              ],
+                              if (imageUrl.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.network(
+                                    imageUrl,
+                                    width: double.infinity,
+                                    height: 190,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                          if (content.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              content,
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.nanumPenScript(
-                                fontSize: 14,
-                                height: 1.5,
-                                color: const Color(0xFF4B5563),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(16),
+                              onTap: () => _showDiaryActionSheet(docId, data),
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: const Color(
+                                    0xFF1E1E1E,
+                                  ).withValues(alpha: 0.75),
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: const Icon(
+                                  Icons.edit_rounded,
+                                  size: 15,
+                                  color: Colors.white,
+                                ),
                               ),
-                            ),
-                          ],
-                          if (imageUrl.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Image.network(
-                                imageUrl,
-                                width: double.infinity,
-                                height: 190,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () => _showDiaryActionSheet(docId, data),
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E1E1E).withValues(alpha: 0.75),
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: const Icon(
-                              Icons.edit_rounded,
-                              size: 15,
-                              color: Colors.white,
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                  ],
-                );
+                      ],
+                    );
                   },
                 ),
         ),
@@ -2804,13 +3157,23 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
             ),
             Expanded(
               child: Center(
-                child: Text(
-                  isEnglish
-                      ? '${_listMonthAnchor.year}.${_listMonthAnchor.month.toString().padLeft(2, '0')}'
-                      : '${_listMonthAnchor.year}년 ${_listMonthAnchor.month}월',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _openListMonthYearPicker,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Text(
+                      isEnglish
+                          ? '${_listMonthAnchor.year}.${_listMonthAnchor.month.toString().padLeft(2, '0')}'
+                          : '${_listMonthAnchor.year}년 ${_listMonthAnchor.month}월',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -2849,11 +3212,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.menu_book_rounded,
-              color: Color(0xFFBDBDBD),
-              size: 28,
-            ),
+            Icon(Icons.menu_book_rounded, color: Color(0xFFBDBDBD), size: 28),
             SizedBox(height: 8),
             Text(
               tr('선택한 날짜의 일기가 없습니다.', 'No diary on selected date.'),
@@ -2995,10 +3354,13 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
   String? _selectedMoodCustomBase64;
   late List<_DraftContentBlock> _draftBlocks;
   int _focusedBlockIndex = 0;
-  bool _isTitleLocked = false;
   bool _isPickingImage = false;
   bool _isAiTransforming = false;
   bool _saving = false;
+  List<Map<String, dynamic>>? _lastAiUndoTargets;
+
+  bool get _canUndoAiTransform =>
+      _lastAiUndoTargets != null && _lastAiUndoTargets!.isNotEmpty;
 
   @override
   void initState() {
@@ -3029,7 +3391,9 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       _draftBlocks = [_createTextBlock()];
     }
     _loadCustomMoods();
-    _ensureAssetsCached().then((_) { if (mounted) setState(() {}); });
+    _ensureAssetsCached().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _loadCustomMoods() async {
@@ -3038,8 +3402,9 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
           .collection(widget.userEmail)
           .doc('_custom_moods')
           .get();
-      if (!doc.exists || !mounted) return;
-      final moods = (doc.data()?['moods'] as List<dynamic>?) ?? [];
+      final moods = doc.exists
+          ? ((doc.data()?['moods'] as List<dynamic>?) ?? <dynamic>[])
+          : <dynamic>[];
       final seenKeys = <String>{};
       final seenUrls = <String>{};
       final uniqueMoodRows = <Map<String, dynamic>>[];
@@ -3050,7 +3415,8 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         final key = (moodData['key'] ?? '').toString();
         final storageUrl = (moodData['storageUrl'] ?? '').toString();
         final storagePath = (moodData['storagePath'] ?? '').toString();
-        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty)) continue;
+        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty))
+          continue;
         if (seenKeys.contains(key) || seenUrls.contains(storageUrl)) continue;
         seenKeys.add(key);
         if (storageUrl.isNotEmpty) seenUrls.add(storageUrl);
@@ -3060,8 +3426,14 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
           'storagePath': storagePath,
         });
       }
+      var usedStorageFallback = false;
+      if (uniqueMoodRows.isEmpty) {
+        uniqueMoodRows.addAll(await _listMoodRowsFromStorage(widget.userEmail));
+        usedStorageFallback = uniqueMoodRows.isNotEmpty;
+      }
 
       final loadedOptions = <MoodOption>[];
+      final cleanedRows = <Map<String, dynamic>>[];
       final seenImageSignatures = <String>{};
       for (final moodData in uniqueMoodRows) {
         final key = (moodData['key'] ?? '').toString();
@@ -3076,12 +3448,26 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
           final signature = base64Encode(bytes);
           if (seenImageSignatures.contains(signature)) continue;
           seenImageSignatures.add(signature);
-          loadedOptions.add(MoodOption.custom(
-            key: key,
-            label: tr('커스텀', 'Custom'),
-            customIconBytes: bytes,
-          ));
+          cleanedRows.add({
+            'key': key,
+            'storageUrl': storageUrl,
+            'storagePath': ref.fullPath,
+          });
+          loadedOptions.add(
+            MoodOption.custom(
+              key: key,
+              label: tr('커스텀', 'Custom'),
+              customIconBytes: bytes,
+            ),
+          );
         } catch (_) {}
+      }
+      if (cleanedRows.isNotEmpty &&
+          (usedStorageFallback || cleanedRows.length != moods.length || !doc.exists)) {
+        await FirebaseFirestore.instance
+            .collection(widget.userEmail)
+            .doc('_custom_moods')
+            .set({'moods': cleanedRows});
       }
       if (!mounted) return;
       setState(() {
@@ -3100,26 +3486,6 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       block.focusNode?.dispose();
     }
     super.dispose();
-  }
-
-  void _applyDateAsTitle() {
-    FocusScope.of(context).unfocus();
-    final dateTitle =
-        '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
-    setState(() {
-      _isTitleLocked = true;
-      _titleController.value = TextEditingValue(
-        text: dateTitle,
-        selection: TextSelection.collapsed(offset: dateTitle.length),
-      );
-    });
-  }
-
-  void _unlockTitleEdit() {
-    setState(() {
-      _isTitleLocked = false;
-      _titleController.clear();
-    });
   }
 
   List<MoodOption> get _editorMoodOptions {
@@ -3177,12 +3543,13 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
                 Expanded(
                   child: GridView.builder(
                     itemCount: _editorMoodOptions.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      mainAxisSpacing: 14,
-                      crossAxisSpacing: 8,
-                      childAspectRatio: 1.05,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          mainAxisSpacing: 14,
+                          crossAxisSpacing: 8,
+                          childAspectRatio: 1.05,
+                        ),
                     itemBuilder: (_, index) {
                       final mood = _editorMoodOptions[index];
                       return InkWell(
@@ -3208,7 +3575,8 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
 
     setState(() {
       _selectedMoodKey = picked.key;
-      _selectedMoodCustomBase64 = picked.customIconBase64 ??
+      _selectedMoodCustomBase64 =
+          picked.customIconBase64 ??
           (picked.customIconBytes != null
               ? base64Encode(picked.customIconBytes!)
               : null);
@@ -3255,7 +3623,10 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         _focusedBlockIndex = index;
       }
     });
-    return _DraftContentBlock.text(controller: controller, focusNode: focusNode);
+    return _DraftContentBlock.text(
+      controller: controller,
+      focusNode: focusNode,
+    );
   }
 
   void _dismissKeyboard() {
@@ -3306,8 +3677,8 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
   }
 
   void _focusInputAroundImage(int imageIndex) {
-    var targetIndex = _nextTextBlockIndex(imageIndex) ??
-        _previousTextBlockIndex(imageIndex);
+    var targetIndex =
+        _nextTextBlockIndex(imageIndex) ?? _previousTextBlockIndex(imageIndex);
     if (targetIndex == null) {
       setState(() {
         _draftBlocks.add(_createTextBlock());
@@ -3334,8 +3705,9 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     required Uint8List bytes,
     required String imageName,
   }) {
-    final currentIndex =
-        _focusedBlockIndex.clamp(0, _draftBlocks.length - 1).toInt();
+    final currentIndex = _focusedBlockIndex
+        .clamp(0, _draftBlocks.length - 1)
+        .toInt();
     final currentBlock = _draftBlocks[currentIndex];
     if (!currentBlock.isText) {
       return;
@@ -3343,8 +3715,9 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
 
     final controller = currentBlock.controller!;
     final selection = controller.selection;
-    final cursor =
-        selection.isValid ? selection.baseOffset.clamp(0, controller.text.length) : controller.text.length;
+    final cursor = selection.isValid
+        ? selection.baseOffset.clamp(0, controller.text.length)
+        : controller.text.length;
     final before = controller.text.substring(0, cursor);
     final after = controller.text.substring(cursor);
 
@@ -3417,7 +3790,8 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       final previousTextController = previousTextBlock.controller!;
       final previousLength = previousTextController.text.length;
       setState(() {
-        previousTextController.text = previousTextController.text + controller.text;
+        previousTextController.text =
+            previousTextController.text + controller.text;
         _draftBlocks.removeAt(index); // current text
         _draftBlocks.removeAt(index - 1); // image
         _focusedBlockIndex = index - 2;
@@ -3502,10 +3876,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         if (text.trim().isEmpty) {
           continue;
         }
-        blocks.add({
-          'type': 'text',
-          'text': text,
-        });
+        blocks.add({'type': 'text', 'text': text});
       } else {
         final imageBytes = block.imageBytes;
         if (imageBytes != null) {
@@ -3518,18 +3889,12 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
             SettableMetadata(contentType: 'image/jpeg'),
           );
           final url = await ref.getDownloadURL();
-          blocks.add({
-            'type': 'image',
-            'url': url,
-          });
+          blocks.add({'type': 'image', 'url': url});
           continue;
         }
         final imageUrl = (block.imageUrl ?? '').trim();
         if (imageUrl.isNotEmpty) {
-          blocks.add({
-            'type': 'image',
-            'url': imageUrl,
-          });
+          blocks.add({'type': 'image', 'url': imageUrl});
         }
       }
     }
@@ -3605,17 +3970,16 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
           ),
           content: Text(
             tr('AI로 글을 변환하겠습니까?', 'Do you want AI to rewrite your text?'),
-            style: TextStyle(
-              color: textSub,
-              fontSize: 14,
-              height: 1.35,
-            ),
+            style: TextStyle(color: textSub, fontSize: 14, height: 1.35),
           ),
           actions: [
             TextButton(
               style: TextButton.styleFrom(
                 foregroundColor: textSub,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
               ),
               onPressed: () => Navigator.of(dialogContext).pop(false),
               child: Text(tr('아니오', 'No')),
@@ -3624,7 +3988,10 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 9,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -3641,16 +4008,19 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     }
 
     final textTargets = <Map<String, dynamic>>[];
+    final undoTargets = <Map<String, dynamic>>[];
     for (var i = 0; i < _draftBlocks.length; i++) {
       final block = _draftBlocks[i];
       if (!block.isText) {
         continue;
       }
-      final text = block.controller!.text.trim();
+      final originalText = block.controller!.text;
+      final text = originalText.trim();
       if (text.isEmpty) {
         continue;
       }
       textTargets.add({'index': i, 'text': text});
+      undoTargets.add({'index': i, 'text': originalText});
     }
 
     if (textTargets.isEmpty) {
@@ -3689,24 +4059,29 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       client.close();
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        _showAiError(tr(
-          'AI 변환 서버 호출에 실패했습니다.\n다시 시도해주세요.',
-          'Failed to call AI server.\nPlease try again.',
-        ));
+        _showAiError(
+          tr(
+            'AI 변환 서버 호출에 실패했습니다.\n다시 시도해주세요.',
+            'Failed to call AI server.\nPlease try again.',
+          ),
+        );
         return;
       }
 
       final decoded = jsonDecode(raw);
       final items = decoded is Map<String, dynamic> ? decoded['items'] : null;
       if (items is! List) {
-        _showAiError(tr(
-          'AI 변환 결과 형식이 올바르지 않습니다.\n다시 시도해주세요.',
-          'AI result format is invalid.\nPlease try again.',
-        ));
+        _showAiError(
+          tr(
+            'AI 변환 결과 형식이 올바르지 않습니다.\n다시 시도해주세요.',
+            'AI result format is invalid.\nPlease try again.',
+          ),
+        );
         return;
       }
 
       setState(() {
+        _lastAiUndoTargets = undoTargets;
         for (final item in items) {
           if (item is! Map) continue;
           final index = item['index'];
@@ -3718,16 +4093,57 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
           block.controller!.text = text;
         }
       });
-      _showSnackBar(tr('AI 변환이 완료되었습니다.', 'AI rewrite completed.'));
+      _showSnackBar(
+        tr(
+          'AI 변환이 완료되었습니다. 버튼으로 되돌릴 수 있어요.',
+          'AI rewrite completed. You can undo from the button.',
+        ),
+      );
     } catch (_) {
       await minDelay;
-      _showAiError(tr(
-        'AI 변환 중 오류가 발생했습니다.\n다시 시도해주세요.',
-        'An error occurred during AI rewrite.\nPlease try again.',
-      ));
+      _showAiError(
+        tr(
+          'AI 변환 중 오류가 발생했습니다.\n다시 시도해주세요.',
+          'An error occurred during AI rewrite.\nPlease try again.',
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isAiTransforming = false);
     }
+  }
+
+  void _undoLastAiTransform() {
+    if (_saving || _isAiTransforming) {
+      return;
+    }
+    final snapshots = _lastAiUndoTargets;
+    if (snapshots == null || snapshots.isEmpty) {
+      return;
+    }
+    setState(() {
+      for (final item in snapshots) {
+        final index = item['index'];
+        final text = item['text'];
+        if (index is! int || text is! String) continue;
+        if (index < 0 || index >= _draftBlocks.length) continue;
+        final block = _draftBlocks[index];
+        if (!block.isText) continue;
+        block.controller!.text = text;
+      }
+      _lastAiUndoTargets = null;
+    });
+    _showSnackBar(tr('AI 변환 전 상태로 되돌렸습니다.', 'Restored text before AI rewrite.'));
+  }
+
+  Future<void> _handleAiButtonPressed() async {
+    if (_saving || _isAiTransforming) {
+      return;
+    }
+    if (_canUndoAiTransform) {
+      _undoLastAiTransform();
+      return;
+    }
+    await _confirmAndTransformByAi();
   }
 
   String get _formattedDate {
@@ -3742,7 +4158,8 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         .where((t) => t.isNotEmpty)
         .join('\n');
     final hasImage = _draftBlocks.any(
-      (b) => !b.isText && (b.imageBytes != null || (b.imageUrl ?? '').isNotEmpty),
+      (b) =>
+          !b.isText && (b.imageBytes != null || (b.imageUrl ?? '').isNotEmpty),
     );
 
     if (title.isEmpty) {
@@ -3788,9 +4205,10 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         final removedImageUrls = previousImageUrls.difference(currentImageUrls);
         await _deleteStorageFiles(removedImageUrls);
       } else {
-        await FirebaseFirestore.instance
-            .collection(widget.userEmail)
-            .add({...payload, 'createdAt': FieldValue.serverTimestamp()});
+        await FirebaseFirestore.instance.collection(widget.userEmail).add({
+          ...payload,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
       }
       if (mounted) {
         Navigator.of(context).pop();
@@ -3804,10 +4222,21 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     }
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(
+    String message, {
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: (actionLabel != null && onAction != null)
+            ? SnackBarAction(label: actionLabel, onPressed: onAction)
+            : null,
+      ),
     );
   }
 
@@ -3816,20 +4245,25 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-        title: Row(children: [
-          Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444)),
-          SizedBox(width: 8),
-          Text(isEnglish ? 'Error' : '오류 발생', style: TextStyle(fontWeight: FontWeight.w700)),
-        ]),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: [
+            Icon(Icons.error_outline_rounded, color: Color(0xFFEF4444)),
+            SizedBox(width: 8),
+            Text(
+              isEnglish ? 'Error' : '오류 발생',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
         content: Text(message),
         actions: [
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF1E1E1E),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () => Navigator.pop(context),
             child: Text(tr('확인', 'OK')),
@@ -3839,10 +4273,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     );
   }
 
-  Widget _buildEditorMoodAsset(
-    MoodOption mood, {
-    required double size,
-  }) {
+  Widget _buildEditorMoodAsset(MoodOption mood, {required double size}) {
     if (mood.customIconBytes != null) {
       return ClipOval(
         child: Image.memory(
@@ -3868,7 +4299,12 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     }
     final cachedBytes = _globalAssetCache[mood.key];
     if (cachedBytes != null) {
-      return Image.memory(cachedBytes, width: size, height: size, fit: BoxFit.contain);
+      return Image.memory(
+        cachedBytes,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+      );
     }
     if (mood.assetPath.isNotEmpty) {
       return Image.asset(
@@ -3880,10 +4316,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
             Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
       );
     }
-    return Text(
-      mood.fallbackEmoji,
-      style: TextStyle(fontSize: size * 0.8),
-    );
+    return Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8));
   }
 
   @override
@@ -3923,330 +4356,319 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         onTap: _dismissKeyboard,
         child: SafeArea(
           child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-          child: Column(
-            children: [
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: panelBg,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: lineColor),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Align(
-                        alignment: Alignment.center,
-                        child: Text(
-                          _formattedDate,
-                          style: const TextStyle(
-                            color: textSub,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
+            padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: panelBg,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: lineColor),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            _formattedDate,
+                            style: const TextStyle(
+                              color: textSub,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Divider(height: 1, color: lineColor),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          if (selectedMood != null) ...[
-                            InkWell(
-                              borderRadius: BorderRadius.circular(20),
-                              onTap: _saving ? null : _pickEditorMood,
-                              child: _buildEditorMoodAsset(selectedMood, size: 26),
-                            ),
-                            const SizedBox(width: 8),
-                          ] else ...[
-                            InkWell(
-                              borderRadius: BorderRadius.circular(20),
-                              onTap: _saving ? null : _pickEditorMood,
-                              child: const Icon(
-                                Icons.emoji_emotions_outlined,
-                                size: 24,
-                                color: Color(0xFF6B7280),
+                        const SizedBox(height: 10),
+                        const Divider(height: 1, color: lineColor),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            if (selectedMood != null) ...[
+                              InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: _saving ? null : _pickEditorMood,
+                                child: _buildEditorMoodAsset(
+                                  selectedMood,
+                                  size: 26,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ] else ...[
+                              InkWell(
+                                borderRadius: BorderRadius.circular(20),
+                                onTap: _saving ? null : _pickEditorMood,
+                                child: const Icon(
+                                  Icons.emoji_emotions_outlined,
+                                  size: 24,
+                                  color: Color(0xFF6B7280),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Expanded(
+                              child: TextField(
+                                controller: _titleController,
+                                style: TextStyle(
+                                  color: textMain,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 15,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: tr('제목', 'Title'),
+                                  isDense: true,
+                                  border: InputBorder.none,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                ),
                               ),
                             ),
-                            const SizedBox(width: 8),
                           ],
-                          Expanded(
-                            child: TextField(
-                              controller: _titleController,
-                              readOnly: _isTitleLocked,
-                              canRequestFocus: !_isTitleLocked,
-                              enableInteractiveSelection: !_isTitleLocked,
-                              showCursor: !_isTitleLocked,
-                              style: TextStyle(
-                                color: _isTitleLocked
-                                    ? const Color(0xFF6B7280)
-                                    : textMain,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: tr('제목', 'Title'),
-                                isDense: true,
-                                border: InputBorder.none,
-                                filled: _isTitleLocked,
-                                fillColor: const Color(0xFFE6E8EC),
-                                contentPadding: const EdgeInsets.symmetric(
+                        ),
+                        const SizedBox(height: 4),
+                        const Divider(height: 1, color: lineColor),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: _saving ? null : _pickImage,
+                              style: TextButton.styleFrom(
+                                foregroundColor: accent,
+                                backgroundColor: const Color(0xFFE5E7EB),
+                                padding: const EdgeInsets.symmetric(
                                   horizontal: 10,
                                   vertical: 8,
                                 ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            onPressed:
-                                _isTitleLocked ? _unlockTitleEdit : _applyDateAsTitle,
-                            style: TextButton.styleFrom(
-                              minimumSize: Size.zero,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 6,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: _isTitleLocked
-                                  ? accent
-                                  : textSub,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  tr('제목 없음', 'Untitled'),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
-                                if (_isTitleLocked) ...[
-                                  const SizedBox(width: 2),
-                                  const Icon(Icons.check_rounded, size: 14),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      const Divider(height: 1, color: lineColor),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          TextButton.icon(
-                            onPressed: _saving ? null : _pickImage,
-                            style: TextButton.styleFrom(
-                              foregroundColor: accent,
-                              backgroundColor: const Color(0xFFE5E7EB),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
                               ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
+                              icon: const Icon(Icons.image_outlined, size: 18),
+                              label: Text(
+                                _isPickingImage
+                                    ? tr('불러오는 중...', 'Loading...')
+                                    : tr('사진 추가', 'Add Photo'),
+                                style: const TextStyle(fontSize: 12),
                               ),
                             ),
-                            icon: const Icon(Icons.image_outlined, size: 18),
-                            label: Text(
-                              _isPickingImage
-                                  ? tr('불러오는 중...', 'Loading...')
-                                  : tr('사진 추가', 'Add Photo'),
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const Divider(height: 1, color: lineColor),
-                      const SizedBox(height: 6),
-                      Expanded(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: _saving ? null : _focusLastTextBlock,
-                          child: ListView.builder(
-                            itemCount: _draftBlocks.length,
-                            itemBuilder: (context, index) {
-                              final block = _draftBlocks[index];
-                              if (!block.isText) {
-                                final imageBytes = block.imageBytes;
-                                final imageUrl = (block.imageUrl ?? '').trim();
-                                final hasImage =
-                                    imageBytes != null || imageUrl.isNotEmpty;
-                                if (!hasImage) {
-                                  return const SizedBox.shrink();
-                                }
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                                    children: [
-                                      GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onTap: _dismissKeyboard,
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(12),
-                                          child: Stack(
-                                            children: [
-                                              if (imageBytes != null)
-                                                Image.memory(
-                                                  imageBytes,
-                                                  width: double.infinity,
-                                                  height: 170,
-                                                  fit: BoxFit.cover,
-                                                )
-                                              else
-                                                Image.network(
-                                                  imageUrl,
-                                                  width: double.infinity,
-                                                  height: 170,
-                                                  fit: BoxFit.cover,
-                                                ),
-                                              Positioned(
-                                                top: 8,
-                                                right: 8,
-                                                child: InkWell(
-                                                  onTap: _saving
-                                                      ? null
-                                                      : () => _removeImageBlockAt(index),
-                                                  child: Container(
-                                                    padding: const EdgeInsets.all(4),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.black.withValues(
-                                                        alpha: 0.55,
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Divider(height: 1, color: lineColor),
+                        const SizedBox(height: 6),
+                        Expanded(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _saving ? null : _focusLastTextBlock,
+                            child: ListView.builder(
+                              itemCount: _draftBlocks.length,
+                              itemBuilder: (context, index) {
+                                final block = _draftBlocks[index];
+                                if (!block.isText) {
+                                  final imageBytes = block.imageBytes;
+                                  final imageUrl = (block.imageUrl ?? '')
+                                      .trim();
+                                  final hasImage =
+                                      imageBytes != null || imageUrl.isNotEmpty;
+                                  if (!hasImage) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: _dismissKeyboard,
+                                          child: ClipRRect(
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            child: Stack(
+                                              children: [
+                                                if (imageBytes != null)
+                                                  Image.memory(
+                                                    imageBytes,
+                                                    width: double.infinity,
+                                                    height: 170,
+                                                    fit: BoxFit.cover,
+                                                  )
+                                                else
+                                                  Image.network(
+                                                    imageUrl,
+                                                    width: double.infinity,
+                                                    height: 170,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: InkWell(
+                                                    onTap: _saving
+                                                        ? null
+                                                        : () =>
+                                                              _removeImageBlockAt(
+                                                                index,
+                                                              ),
+                                                    child: Container(
+                                                      padding:
+                                                          const EdgeInsets.all(
+                                                            4,
+                                                          ),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.black
+                                                            .withValues(
+                                                              alpha: 0.55,
+                                                            ),
+                                                        shape: BoxShape.circle,
                                                       ),
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: const Icon(
-                                                      Icons.close_rounded,
-                                                      color: Colors.white,
-                                                      size: 16,
+                                                      child: const Icon(
+                                                        Icons.close_rounded,
+                                                        color: Colors.white,
+                                                        size: 16,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onTap: _saving
-                                            ? null
-                                            : () => _focusInputAroundImage(index),
-                                        child: const SizedBox(
-                                          height: 18,
-                                          width: double.infinity,
+                                        GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
+                                          onTap: _saving
+                                              ? null
+                                              : () => _focusInputAroundImage(
+                                                  index,
+                                                ),
+                                          child: const SizedBox(
+                                            height: 18,
+                                            width: double.infinity,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }
+                                      ],
+                                    ),
+                                  );
+                                }
 
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 6),
-                                child: Focus(
-                                  onKeyEvent: (node, event) {
-                                    if (event.logicalKey ==
-                                            LogicalKeyboardKey.backspace &&
-                                        event is KeyDownEvent &&
-                                        _handleBackspaceOnTextBlock(index)) {
-                                      return KeyEventResult.handled;
-                                    }
-                                    return KeyEventResult.ignored;
-                                  },
-                                  child: TextField(
-                                    controller: block.controller,
-                                    focusNode: block.focusNode,
-                                    maxLines: null,
-                                    textAlignVertical: TextAlignVertical.top,
-                                    decoration: InputDecoration(
-                                      hintText: index == 0
-                                          ? tr(
-                                              '오늘은 어떤 하루였나요?',
-                                              'How was your day today?',
-                                            )
-                                          : null,
-                                      border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(
-                                        horizontal: 2,
-                                        vertical: 8,
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 6),
+                                  child: Focus(
+                                    onKeyEvent: (node, event) {
+                                      if (event.logicalKey ==
+                                              LogicalKeyboardKey.backspace &&
+                                          event is KeyDownEvent &&
+                                          _handleBackspaceOnTextBlock(index)) {
+                                        return KeyEventResult.handled;
+                                      }
+                                      return KeyEventResult.ignored;
+                                    },
+                                    child: TextField(
+                                      controller: block.controller,
+                                      focusNode: block.focusNode,
+                                      maxLines: null,
+                                      textAlignVertical: TextAlignVertical.top,
+                                      decoration: InputDecoration(
+                                        hintText: index == 0
+                                            ? tr(
+                                                '오늘은 어떤 하루였나요?',
+                                                'How was your day today?',
+                                              )
+                                            : null,
+                                        border: InputBorder.none,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 2,
+                                              vertical: 8,
+                                            ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
+                                );
+                              },
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed:
-                          (_saving || _isAiTransforming) ? null : _confirmAndTransformByAi,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: accent,
-                        side: const BorderSide(color: Color(0xFFD1D5DB)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      icon: _isAiTransforming
-                          ? const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_awesome_rounded, size: 16),
-                      label: Text(tr('AI변환', 'AI Rewrite')),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: _saving ? null : _saveDiary,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF1F2937),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          if (_saving) ...[
-                            const SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: (_saving || _isAiTransforming)
+                            ? null
+                            : _handleAiButtonPressed,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: accent,
+                          side: const BorderSide(color: Color(0xFFD1D5DB)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        icon: _isAiTransforming
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                _canUndoAiTransform
+                                    ? Icons.undo_rounded
+                                    : Icons.auto_awesome_rounded,
+                                size: 16,
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          Text(
-                            widget.isEditMode
-                                ? tr('수정 저장', 'Save Changes')
-                                : tr('일기 저장', 'Save Diary'),
-                          ),
-                        ],
+                        label: Text(
+                          _canUndoAiTransform
+                              ? tr('되돌리기', 'Undo')
+                              : tr('AI변환', 'AI Rewrite'),
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: _saving ? null : _saveDiary,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF1F2937),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            if (_saving) ...[
+                              const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
+                            Text(
+                              widget.isEditMode
+                                  ? tr('수정 저장', 'Save Changes')
+                                  : tr('일기 저장', 'Save Diary'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -4267,26 +4689,190 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
   bool _eraserMode = false;
   double _penWidth = 5;
   double _eraserWidth = 20;
+  Color _penColor = const Color(0xFF111827);
+  _PenTexture _penTexture = _PenTexture.solid;
+  Offset? _eraserGuidePoint;
+  int? _activePointerId;
 
   void _startStroke(Offset point) {
-    _strokes.add(_SketchStroke(
-      isEraser: _eraserMode,
-      width: _eraserMode ? _eraserWidth : _penWidth,
-    ));
-    _strokes.last.points.add(point);
+    _strokes.add(
+      _SketchStroke(
+        isEraser: _eraserMode,
+        width: _eraserMode ? _eraserWidth : _penWidth,
+        color: _penColor,
+        texture: _penTexture,
+      ),
+    );
+    final clampedPoint = _clampPointToCanvas(point);
+    _strokes.last.points.add(clampedPoint);
+    if (_eraserMode) {
+      _eraserGuidePoint = clampedPoint;
+    }
     setState(() {});
   }
 
   void _addPoint(Offset point) {
     if (_strokes.isEmpty) return;
-    _strokes.last.points.add(point);
+    final stroke = _strokes.last;
+    final nextPoint = _clampPointToCanvas(point);
+    final lastPoint = stroke.points.isEmpty ? null : stroke.points.last;
+    if (lastPoint == null) {
+      stroke.points.add(nextPoint);
+    } else {
+      final delta = nextPoint - lastPoint;
+      final distance = delta.distance;
+      if (distance <= 0.4) return;
+      final step = math.max(1.2, stroke.width * 0.35);
+      final segments = math.max(1, (distance / step).ceil());
+      for (int i = 1; i <= segments; i++) {
+        final t = i / segments;
+        stroke.points.add(
+          Offset(lastPoint.dx + delta.dx * t, lastPoint.dy + delta.dy * t),
+        );
+      }
+    }
+    if (_eraserMode) {
+      _eraserGuidePoint = stroke.points.last;
+    }
     setState(() {});
+  }
+
+  Offset _clampPointToCanvas(Offset point) {
+    return Offset(
+      point.dx.clamp(0.0, _canvasSize),
+      point.dy.clamp(0.0, _canvasSize),
+    );
+  }
+
+  void _endStroke() {
+    if (_eraserGuidePoint != null) {
+      setState(() {
+        _eraserGuidePoint = null;
+      });
+      return;
+    }
+    setState(() {});
+  }
+
+  void _handlePointerDown(PointerDownEvent event) {
+    if (_activePointerId != null) return;
+    _activePointerId = event.pointer;
+    _startStroke(event.localPosition);
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (_activePointerId != event.pointer) return;
+    _addPoint(event.localPosition);
+  }
+
+  void _handlePointerEnd(int pointer) {
+    if (_activePointerId != pointer) return;
+    _activePointerId = null;
+    _endStroke();
   }
 
   void _undoLastStroke() {
     if (_strokes.isEmpty) return;
     setState(() {
       _strokes.removeLast();
+    });
+  }
+
+  Future<void> _pickPenColorFromBoard() async {
+    final picked = await showDialog<Color>(
+      context: context,
+      builder: (dialogContext) {
+        final colors = _buildColorBoardPalette();
+        return Dialog(
+          backgroundColor: const Color(0xFFF8F8F8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      tr('펜 색상 선택', 'Pick Pen Color'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: _penColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFF111827),
+                          width: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LayoutBuilder(
+                  builder: (_, constraints) {
+                    final boardWidth = math.min(300.0, constraints.maxWidth);
+                    return SizedBox(
+                      width: boardWidth,
+                      child: GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: colors.length,
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 12,
+                              crossAxisSpacing: 0,
+                              mainAxisSpacing: 0,
+                            ),
+                        itemBuilder: (context, index) {
+                          final color = colors[index];
+                          return InkWell(
+                            onTap: () => Navigator.of(dialogContext).pop(color),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: color,
+                                border: Border.all(
+                                  color: _penColor.value == color.value
+                                      ? const Color(0xFF111827)
+                                      : Colors.transparent,
+                                  width: 1.4,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    child: Text(tr('취소', 'Cancel')),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted || picked == null) return;
+    setState(() {
+      _eraserMode = false;
+      _penColor = picked;
     });
   }
 
@@ -4300,29 +4886,17 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
 
     // Clip to circle and fill white inside
     canvas.save();
-    canvas.clipPath(Path()..addOval(Rect.fromCircle(center: center, radius: radius)));
+    canvas.clipPath(
+      Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
+    );
     canvas.drawCircle(center, radius, Paint()..color = Colors.white);
-
-    for (final stroke in _strokes) {
-      if (stroke.points.length < 2) {
-        continue;
-      }
-      final paint = Paint()
-        ..color = stroke.isEraser ? Colors.white : Colors.black
-        ..strokeWidth = stroke.width * scale
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke;
-
-      final path = Path()..moveTo(stroke.points.first.dx * scale, stroke.points.first.dy * scale);
-      for (final point in stroke.points.skip(1)) {
-        path.lineTo(point.dx * scale, point.dy * scale);
-      }
-      canvas.drawPath(path, paint);
-    }
+    _SketchPainter.drawStrokes(canvas, _strokes, scale: scale);
     canvas.restore();
 
-    final image = await recorder.endRecording().toImage(outSize.toInt(), outSize.toInt());
+    final image = await recorder.endRecording().toImage(
+      outSize.toInt(),
+      outSize.toInt(),
+    );
     // PNG 형식으로 저장하여 원 바깥이 투명하게 유지
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null || !mounted) {
@@ -4333,177 +4907,289 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
     return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       backgroundColor: const Color(0xFFF8F8F8),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Text(
-                  isEnglish ? 'Draw Icon' : '아이콘 그리기',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => setState(() => _strokes.clear()),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFF9CA3AF),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: media.size.height * 0.9),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final canvasLength = math.min(
+              _canvasSize,
+              math.max(160.0, constraints.maxWidth - 64),
+            );
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        isEnglish ? 'Draw Icon' : '아이콘 그리기',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () => setState(() => _strokes.clear()),
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF9CA3AF),
+                        ),
+                        child: Text(tr('초기화', 'Reset')),
+                      ),
+                    ],
                   ),
-                  child: Text(tr('초기화', 'Reset')),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              tr('원 안에 나만의 기분 아이콘을 그려보세요', 'Draw your own mood icon inside the circle'),
-              style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                  const SizedBox(height: 4),
+                  Text(
+                    tr(
+                      '원 안에 나만의 기분 아이콘을 그려보세요',
+                      'Draw your own mood icon inside the circle',
+                    ),
+                    style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.06),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: SizedBox(
+                      width: canvasLength,
+                      height: canvasLength,
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: canvasLength,
+                            height: canvasLength,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                            ),
+                            child: ClipOval(
+                              child: Listener(
+                                behavior: HitTestBehavior.opaque,
+                                onPointerDown: _handlePointerDown,
+                                onPointerMove: _handlePointerMove,
+                                onPointerUp: (event) =>
+                                    _handlePointerEnd(event.pointer),
+                                onPointerCancel: (event) =>
+                                    _handlePointerEnd(event.pointer),
+                                child: CustomPaint(
+                                  painter: _SketchPainter(
+                                    strokes: _strokes,
+                                    eraserGuideCenter: _eraserGuidePoint,
+                                    eraserGuideRadius: _eraserWidth / 2,
+                                  ),
+                                  child: const SizedBox.expand(),
+                                ),
+                              ),
+                            ),
+                          ),
+                          IgnorePointer(
+                            child: CustomPaint(
+                              size: Size(canvasLength, canvasLength),
+                              painter: _DashedCircleBorderPainter(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _ToolButton(
+                        label: tr('펜', 'Pen'),
+                        icon: Icons.edit_rounded,
+                        selected: !_eraserMode,
+                        onTap: () => setState(() => _eraserMode = false),
+                      ),
+                      _ToolButton(
+                        label: tr('지우개', 'Eraser'),
+                        icon: Icons.auto_fix_normal_rounded,
+                        selected: _eraserMode,
+                        onTap: () => setState(() {
+                          _eraserMode = true;
+                        }),
+                      ),
+                      _ToolButton(
+                        label: tr('되돌리기', 'Undo'),
+                        icon: Icons.undo_rounded,
+                        selected: false,
+                        onTap: _undoLastStroke,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      children: [
+                        Text(
+                          tr('펜 색상', 'Pen Color'),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: _pickPenColorFromBoard,
+                          icon: const Icon(Icons.grid_on_rounded, size: 16),
+                          label: Text(tr('색상표', 'Color Board')),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF4B5563),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: _pickPenColorFromBoard,
+                          borderRadius: BorderRadius.circular(99),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: _penColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF111827),
+                                width: 1.2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      tr('펜 텍스처', 'Pen Texture'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final texture in _PenTexture.values)
+                        ChoiceChip(
+                          selected: _penTexture == texture,
+                          label: Text(_textureLabel(texture)),
+                          onSelected: (_) => setState(() {
+                            _eraserMode = false;
+                            _penTexture = texture;
+                          }),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            _eraserMode
+                                ? Icons.auto_fix_normal_rounded
+                                : Icons.edit_rounded,
+                            size: 16,
+                            color: const Color(0xFF6B7280),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _eraserMode
+                                ? tr('지우개 두께', 'Eraser Width')
+                                : tr('펜 두께', 'Pen Width'),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Slider(
+                        value: _eraserMode ? _eraserWidth : _penWidth,
+                        min: 2,
+                        max: 28,
+                        divisions: 26,
+                        onChanged: (v) {
+                          setState(() {
+                            if (_eraserMode) {
+                              _eraserWidth = v;
+                            } else {
+                              _penWidth = v;
+                            }
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF6B7280),
+                            side: const BorderSide(color: Color(0xFFD1D5DB)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(tr('취소', 'Cancel')),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _save,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E1E1E),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(tr('저장', 'Save')),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              child: SizedBox(
-                width: _canvasSize,
-                height: _canvasSize,
-                child: Stack(
-                  children: [
-                    Container(
-                      width: _canvasSize,
-                      height: _canvasSize,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white,
-                      ),
-                      child: ClipOval(
-                        child: GestureDetector(
-                          onPanStart: (details) =>
-                              _startStroke(details.localPosition),
-                          onPanUpdate: (details) =>
-                              _addPoint(details.localPosition),
-                          child: CustomPaint(
-                            painter: _SketchPainter(strokes: _strokes),
-                            child: const SizedBox.expand(),
-                          ),
-                        ),
-                      ),
-                    ),
-                    IgnorePointer(
-                      child: CustomPaint(
-                        size: const Size(_canvasSize, _canvasSize),
-                        painter: _DashedCircleBorderPainter(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _ToolButton(
-                  label: tr('펜', 'Pen'),
-                  icon: Icons.edit_rounded,
-                  selected: !_eraserMode,
-                  onTap: () => setState(() => _eraserMode = false),
-                ),
-                const SizedBox(width: 8),
-                _ToolButton(
-                  label: tr('지우개', 'Eraser'),
-                  icon: Icons.auto_fix_normal_rounded,
-                  selected: _eraserMode,
-                  onTap: () => setState(() => _eraserMode = true),
-                ),
-                const SizedBox(width: 8),
-                _ToolButton(
-                  label: tr('되돌리기', 'Undo'),
-                  icon: Icons.undo_rounded,
-                  selected: false,
-                  onTap: _undoLastStroke,
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Icon(
-                  _eraserMode ? Icons.auto_fix_normal_rounded : Icons.edit_rounded,
-                  size: 16,
-                  color: const Color(0xFF6B7280),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  _eraserMode ? tr('지우개 두께', 'Eraser Width') : tr('펜 두께', 'Pen Width'),
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFF6B7280),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Slider(
-                    value: _eraserMode ? _eraserWidth : _penWidth,
-                    min: 2,
-                    max: 28,
-                    divisions: 26,
-                    onChanged: (v) {
-                      setState(() {
-                        if (_eraserMode) {
-                          _eraserWidth = v;
-                        } else {
-                          _penWidth = v;
-                        }
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF6B7280),
-                      side: const BorderSide(color: Color(0xFFD1D5DB)),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text(tr('취소', 'Cancel')),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _save,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E1E1E),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Text(tr('저장', 'Save')),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -4537,9 +5223,14 @@ class _SettingsTile extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: c),
             const SizedBox(width: 12),
-            Text(label,
-                style: TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w600, color: c)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: c,
+              ),
+            ),
           ],
         ),
       ),
@@ -4573,15 +5264,20 @@ class _ToolButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14,
-                color: selected ? Colors.white : const Color(0xFF6B7280)),
+            Icon(
+              icon,
+              size: 14,
+              color: selected ? Colors.white : const Color(0xFF6B7280),
+            ),
             const SizedBox(width: 4),
-            Text(label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: selected ? Colors.white : const Color(0xFF6B7280),
-                )),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : const Color(0xFF6B7280),
+              ),
+            ),
           ],
         ),
       ),
@@ -4590,40 +5286,192 @@ class _ToolButton extends StatelessWidget {
 }
 
 class _SketchStroke {
-  _SketchStroke({required this.isEraser, required this.width});
+  _SketchStroke({
+    required this.isEraser,
+    required this.width,
+    required this.color,
+    required this.texture,
+  });
   final bool isEraser;
   final double width;
+  final Color color;
+  final _PenTexture texture;
   final List<Offset> points = [];
 }
 
 class _SketchPainter extends CustomPainter {
-  const _SketchPainter({required this.strokes});
+  const _SketchPainter({
+    required this.strokes,
+    this.eraserGuideCenter,
+    this.eraserGuideRadius = 10,
+  });
   final List<_SketchStroke> strokes;
+  final Offset? eraserGuideCenter;
+  final double eraserGuideRadius;
+
+  static void drawStrokes(
+    Canvas canvas,
+    List<_SketchStroke> strokes, {
+    double scale = 1,
+  }) {
+    for (final stroke in strokes) {
+      if (stroke.points.isEmpty) {
+        continue;
+      }
+
+      final width = stroke.width * scale;
+      final scaledPoints = [
+        for (final point in stroke.points)
+          Offset(point.dx * scale, point.dy * scale),
+      ];
+
+      if (stroke.isEraser) {
+        final paint = Paint()
+          ..color = Colors.white
+          ..strokeWidth = width
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round
+          ..style = PaintingStyle.stroke;
+        _drawLinePath(canvas, scaledPoints, paint);
+        continue;
+      }
+
+      switch (stroke.texture) {
+        case _PenTexture.solid:
+          final paint = Paint()
+            ..color = stroke.color
+            ..strokeWidth = width
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..style = PaintingStyle.stroke;
+          _drawLinePath(canvas, scaledPoints, paint);
+          break;
+        case _PenTexture.soft:
+          final basePaint = Paint()
+            ..color = stroke.color.withValues(alpha: 0.34)
+            ..strokeWidth = width + 2
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..style = PaintingStyle.stroke;
+          final topPaint = Paint()
+            ..color = stroke.color.withValues(alpha: 0.85)
+            ..strokeWidth = width
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round
+            ..style = PaintingStyle.stroke;
+          _drawLinePath(canvas, scaledPoints, basePaint);
+          _drawLinePath(canvas, scaledPoints, topPaint);
+          break;
+      }
+    }
+  }
+
+  static void _drawLinePath(Canvas canvas, List<Offset> points, Paint paint) {
+    if (points.isEmpty) return;
+    if (points.length == 1) {
+      canvas.drawCircle(
+        points.first,
+        paint.strokeWidth / 2,
+        paint..style = PaintingStyle.fill,
+      );
+      return;
+    }
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (final point in points.skip(1)) {
+      path.lineTo(point.dx, point.dy);
+    }
+    canvas.drawPath(path, paint);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    for (final stroke in strokes) {
-      if (stroke.points.length < 2) {
-        continue;
-      }
-      final paint = Paint()
-        ..color = stroke.isEraser ? Colors.white : Colors.black
-        ..strokeWidth = stroke.width
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round
-        ..style = PaintingStyle.stroke;
-
-      final path = Path()..moveTo(stroke.points.first.dx, stroke.points.first.dy);
-      for (final point in stroke.points.skip(1)) {
-        path.lineTo(point.dx, point.dy);
-      }
-      canvas.drawPath(path, paint);
+    drawStrokes(canvas, strokes);
+    if (eraserGuideCenter != null) {
+      final center = eraserGuideCenter!;
+      canvas.drawCircle(
+        center,
+        eraserGuideRadius,
+        Paint()
+          ..color = const Color(0xFFEF4444).withValues(alpha: 0.14)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawCircle(
+        center,
+        eraserGuideRadius,
+        Paint()
+          ..color = const Color(0xFFEF4444).withValues(alpha: 0.85)
+          ..strokeWidth = 1.4
+          ..style = PaintingStyle.stroke,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant _SketchPainter oldDelegate) {
     return true;
+  }
+}
+
+enum _PenTexture { solid, soft }
+
+String _textureLabel(_PenTexture texture) {
+  switch (texture) {
+    case _PenTexture.solid:
+      return tr('기본', 'Solid');
+    case _PenTexture.soft:
+      return tr('부드럽게', 'Soft');
+  }
+}
+
+List<Color> _buildColorBoardPalette() {
+  const rows = 12;
+  const cols = 12;
+  final result = <Color>[];
+  for (int row = 0; row < rows; row++) {
+    final vertical = row / (rows - 1);
+    for (int col = 0; col < cols; col++) {
+      if (col == 0) {
+        final value = (1 - vertical).clamp(0.0, 1.0);
+        result.add(HSVColor.fromAHSV(1, 0, 0, value).toColor());
+        continue;
+      }
+      final hue = ((col - 1) / (cols - 2)) * 330;
+      // 선명한 색상을 위해 채도를 높게 유지하고 아래로 갈수록 명도만 강하게 낮춘다.
+      const saturation = 0.96;
+      final value = (1.0 - vertical * 0.98).clamp(0.0, 1.0);
+      result.add(
+        HSVColor.fromAHSV(1, hue, saturation, value.toDouble()).toColor(),
+      );
+    }
+  }
+  return result;
+}
+
+Future<List<Map<String, dynamic>>> _listMoodRowsFromStorage(String userEmail) async {
+  try {
+    final folderRef = FirebaseStorage.instance
+        .ref()
+        .child(userEmail)
+        .child('mood_icons');
+    final result = await folderRef.listAll();
+    final rows = <Map<String, dynamic>>[];
+    for (final item in result.items) {
+      try {
+        final url = await item.getDownloadURL();
+        final fileName = item.name;
+        final dotIndex = fileName.lastIndexOf('.');
+        final key = (dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName).trim();
+        if (key.isEmpty) continue;
+        rows.add({
+          'key': key,
+          'storageUrl': url,
+          'storagePath': item.fullPath,
+        });
+      } catch (_) {}
+    }
+    return rows;
+  } catch (_) {
+    return <Map<String, dynamic>>[];
   }
 }
 
@@ -4659,21 +5507,16 @@ class _DashedCircleBorderPainter extends CustomPainter {
 }
 
 class _DraftContentBlock {
-  _DraftContentBlock.text({
-    required this.controller,
-    required this.focusNode,
-  })  : isText = true,
-        imageBytes = null,
-        imageName = null,
-        imageUrl = null;
+  _DraftContentBlock.text({required this.controller, required this.focusNode})
+    : isText = true,
+      imageBytes = null,
+      imageName = null,
+      imageUrl = null;
 
-  _DraftContentBlock.image({
-    this.imageBytes,
-    this.imageName,
-    this.imageUrl,
-  })  : isText = false,
-        controller = null,
-        focusNode = null;
+  _DraftContentBlock.image({this.imageBytes, this.imageName, this.imageUrl})
+    : isText = false,
+      controller = null,
+      focusNode = null;
 
   final bool isText;
   final TextEditingController? controller;
