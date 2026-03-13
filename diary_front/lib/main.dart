@@ -4731,93 +4731,372 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
     });
   }
 
+  String _colorToHex(Color color) {
+    return color.toARGB32().toRadixString(16).substring(2).toUpperCase();
+  }
+
+  Color? _tryParseHexColor(String input) {
+    final normalized = input.trim().replaceAll('#', '');
+    if (!RegExp(r'^[0-9A-Fa-f]{6}$').hasMatch(normalized)) {
+      return null;
+    }
+    final value = int.tryParse(normalized, radix: 16);
+    if (value == null) return null;
+    return Color(0xFF000000 | value);
+  }
+
   Future<void> _pickPenColorFromBoard() async {
     final picked = await showDialog<Color>(
       context: context,
       builder: (dialogContext) {
-        final colors = _buildColorBoardPalette();
-        return Dialog(
-          backgroundColor: const Color(0xFFF8F8F8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+        final hexController = TextEditingController(
+          text: _colorToHex(_penColor),
+        );
+        final initialHsv = HSVColor.fromColor(_penColor);
+        double hue = initialHsv.hue;
+        double saturation = initialHsv.saturation;
+        double brightness = initialHsv.value;
+        String? errorText;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final previewColor = HSVColor.fromAHSV(
+              1,
+              hue,
+              saturation,
+              brightness,
+            ).toColor();
+
+            void selectColor(Color color) {
+              final hsv = HSVColor.fromColor(color);
+              setDialogState(() {
+                hue = hsv.hue;
+                saturation = hsv.saturation;
+                brightness = hsv.value;
+                hexController.value = TextEditingValue(
+                  text: _colorToHex(color),
+                  selection: const TextSelection.collapsed(offset: 6),
+                );
+                errorText = null;
+              });
+            }
+
+            void applyHex() {
+              final parsed = _tryParseHexColor(hexController.text);
+              setDialogState(() {
+                if (parsed == null) {
+                  errorText = tr(
+                    '6자리 HEX 코드만 입력할 수 있어요.',
+                    'Enter a 6-digit HEX code.',
+                  );
+                  return;
+                }
+              });
+              if (parsed != null) {
+                selectColor(parsed);
+              }
+            }
+
+            void updateFromPalette(Offset position, Size size) {
+              final nextSaturation = (position.dx / size.width).clamp(0.0, 1.0);
+              final nextBrightness = (1 - (position.dy / size.height)).clamp(
+                0.0,
+                1.0,
+              );
+              final color = HSVColor.fromAHSV(
+                1,
+                hue,
+                nextSaturation,
+                nextBrightness,
+              ).toColor();
+              selectColor(color);
+            }
+
+            void updateHue(double nextHue) {
+              final color = HSVColor.fromAHSV(
+                1,
+                nextHue.clamp(0.0, 360.0),
+                saturation,
+                brightness,
+              ).toColor();
+              selectColor(color);
+            }
+
+            return Dialog(
+              backgroundColor: const Color(0xFF262730),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      tr('펜 색상 선택', 'Pick Pen Color'),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
+                    Row(
+                      children: [
+                        Text(
+                          tr('펜 색상 선택', 'Pick Pen Color'),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: previewColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    LayoutBuilder(
+                      builder: (_, constraints) {
+                        final boardWidth = math.min(
+                          constraints.maxWidth,
+                          340.0,
+                        );
+                        final boardHeight = boardWidth * 0.68;
+                        final selectorLeft = saturation * boardWidth;
+                        final selectorTop = (1 - brightness) * boardHeight;
+
+                        return SizedBox(
+                          width: boardWidth,
+                          height: boardHeight,
+                          child: GestureDetector(
+                            onPanDown: (details) => updateFromPalette(
+                              details.localPosition,
+                              Size(boardWidth, boardHeight),
+                            ),
+                            onPanUpdate: (details) => updateFromPalette(
+                              details.localPosition,
+                              Size(boardWidth, boardHeight),
+                            ),
+                            onTapDown: (details) => updateFromPalette(
+                              details.localPosition,
+                              Size(boardWidth, boardHeight),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: ColoredBox(
+                                      color: HSVColor.fromAHSV(
+                                        1,
+                                        hue,
+                                        1,
+                                        1,
+                                      ).toColor(),
+                                    ),
+                                  ),
+                                  Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            Colors.white,
+                                            Colors.transparent,
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: const BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topCenter,
+                                          end: Alignment.bottomCenter,
+                                          colors: [
+                                            Colors.transparent,
+                                            Colors.black,
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    left: selectorLeft - 13,
+                                    top: selectorTop - 13,
+                                    child: Container(
+                                      width: 26,
+                                      height: 26,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Colors.white,
+                                          width: 3,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    LayoutBuilder(
+                      builder: (_, constraints) {
+                        final sliderWidth = math.min(
+                          constraints.maxWidth - 18,
+                          320.0,
+                        );
+                        final knobLeft = (hue / 360) * sliderWidth;
+                        return SizedBox(
+                          width: sliderWidth,
+                          height: 30,
+                          child: GestureDetector(
+                            onPanDown: (details) => updateHue(
+                              (details.localPosition.dx / sliderWidth) * 360,
+                            ),
+                            onPanUpdate: (details) => updateHue(
+                              (details.localPosition.dx / sliderWidth) * 360,
+                            ),
+                            onTapDown: (details) => updateHue(
+                              (details.localPosition.dx / sliderWidth) * 360,
+                            ),
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              alignment: Alignment.centerLeft,
+                              children: [
+                                Container(
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(999),
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFFFF1F1F),
+                                        Color(0xFFFF8A00),
+                                        Color(0xFFFFFF00),
+                                        Color(0xFF40FF00),
+                                        Color(0xFF00FFD1),
+                                        Color(0xFF1E90FF),
+                                        Color(0xFF5B00FF),
+                                        Color(0xFFFF00D4),
+                                        Color(0xFFFF1F1F),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: knobLeft - 12,
+                                  child: Container(
+                                    width: 24,
+                                    height: 24,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: HSVColor.fromAHSV(
+                                        1,
+                                        hue,
+                                        0.85,
+                                        0.9,
+                                      ).toColor(),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 3,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2D35),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF4B4E58)),
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'HEX',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: hexController,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            textCapitalization: TextCapitalization.characters,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[0-9a-fA-F#]'),
+                              ),
+                              LengthLimitingTextInputFormatter(7),
+                            ],
+                            decoration: InputDecoration(
+                              hintText: '#000000',
+                              hintStyle: const TextStyle(
+                                color: Color(0xFF9CA3AF),
+                              ),
+                              errorText: errorText,
+                              isDense: true,
+                              border: InputBorder.none,
+                            ),
+                            onSubmitted: (_) => applyHex(),
+                          ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: _penColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF111827),
-                          width: 1.3,
-                        ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(),
+                            child: Text(
+                              tr('취소', 'Cancel'),
+                              style: const TextStyle(color: Color(0xFFD1D5DB)),
+                            ),
+                          ),
+                          FilledButton(
+                            onPressed: () =>
+                                Navigator.of(dialogContext).pop(previewColor),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.white,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: Text(
+                              tr('선택', 'Select'),
+                              style: const TextStyle(color: Color(0xFF111827)),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                LayoutBuilder(
-                  builder: (_, constraints) {
-                    final boardWidth = math.min(300.0, constraints.maxWidth);
-                    return SizedBox(
-                      width: boardWidth,
-                      child: GridView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: colors.length,
-                        gridDelegate:
-                            const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 12,
-                              crossAxisSpacing: 0,
-                              mainAxisSpacing: 0,
-                            ),
-                        itemBuilder: (context, index) {
-                          final color = colors[index];
-                          return InkWell(
-                            onTap: () => Navigator.of(dialogContext).pop(color),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: color,
-                                border: Border.all(
-                                  color: _penColor.value == color.value
-                                      ? const Color(0xFF111827)
-                                      : Colors.transparent,
-                                  width: 1.4,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.of(dialogContext).pop(),
-                    child: Text(tr('취소', 'Cancel')),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -5374,30 +5653,6 @@ String _textureLabel(_PenTexture texture) {
     case _PenTexture.soft:
       return tr('부드럽게', 'Soft');
   }
-}
-
-List<Color> _buildColorBoardPalette() {
-  const rows = 12;
-  const cols = 12;
-  final result = <Color>[];
-  for (int row = 0; row < rows; row++) {
-    final vertical = row / (rows - 1);
-    for (int col = 0; col < cols; col++) {
-      if (col == 0) {
-        final value = (1 - vertical).clamp(0.0, 1.0);
-        result.add(HSVColor.fromAHSV(1, 0, 0, value).toColor());
-        continue;
-      }
-      final hue = ((col - 1) / (cols - 2)) * 330;
-      // 선명한 색상을 위해 채도를 높게 유지하고 아래로 갈수록 명도만 강하게 낮춘다.
-      const saturation = 0.96;
-      final value = (1.0 - vertical * 0.98).clamp(0.0, 1.0);
-      result.add(
-        HSVColor.fromAHSV(1, hue, saturation, value.toDouble()).toColor(),
-      );
-    }
-  }
-  return result;
 }
 
 Future<List<Map<String, dynamic>>> _listMoodRowsFromStorage(
