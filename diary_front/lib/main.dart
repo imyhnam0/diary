@@ -628,6 +628,8 @@ class DiaryHomePage extends StatefulWidget {
   State<DiaryHomePage> createState() => _DiaryHomePageState();
 }
 
+enum _IconAddMode { draw, photo }
+
 class _DiaryHomePageState extends State<DiaryHomePage> {
   static const MethodChannel _widgetChannel = MethodChannel(
     'diary/home_widget',
@@ -1434,6 +1436,163 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     );
   }
 
+  Future<_IconAddMode?> _showIconAddModeSheet() {
+    return showModalBottomSheet<_IconAddMode>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFFFCFCFD),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD4D7DD),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildAddIconModeTile(
+                  icon: Icons.edit_rounded,
+                  title: tr('아이콘 그리기', 'Draw Icon'),
+                  subtitle: tr(
+                    '직접 그려서 나의 아이콘으로 저장',
+                    'Draw one and save it to your icons',
+                  ),
+                  onTap: () =>
+                      Navigator.of(sheetContext).pop(_IconAddMode.draw),
+                ),
+                const SizedBox(height: 10),
+                _buildAddIconModeTile(
+                  icon: Icons.photo_library_outlined,
+                  title: tr('사진으로 넣기', 'Use Photo'),
+                  subtitle: tr(
+                    '갤러리 사진을 원형으로 잘라 이번 달력에만 사용',
+                    'Crop a gallery photo into a circle for this calendar only',
+                  ),
+                  onTap: () =>
+                      Navigator.of(sheetContext).pop(_IconAddMode.photo),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAddIconModeTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: const Color(0xFFF7F7F8),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: const Color(0xFF111827)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF111827),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF6B7280),
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<MoodOption?> _pickCalendarOnlyPhotoMood() async {
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 92,
+        maxWidth: 1800,
+      );
+      if (picked == null) return null;
+      final rawBytes = await picked.readAsBytes();
+      if (!mounted) return null;
+      final clipped = await showDialog<Uint8List>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _PhotoMoodCropDialog(sourceBytes: rawBytes),
+      );
+      if (clipped == null || clipped.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                tr(
+                  '사진을 원형 아이콘으로 만들지 못했습니다.',
+                  'Failed to make a circular photo icon.',
+                ),
+              ),
+            ),
+          );
+        }
+        return null;
+      }
+      return MoodOption.custom(
+        key: 'photo_${DateTime.now().millisecondsSinceEpoch}',
+        label: tr('사진 아이콘', 'Photo Icon'),
+        customIconBytes: clipped,
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(tr('사진을 불러오지 못했습니다.', 'Failed to load image.')),
+          ),
+        );
+      }
+      return null;
+    }
+  }
+
   Future<void> _openListMonthYearPicker() async {
     final minYear = 2000;
     final maxYear = 2100;
@@ -1615,7 +1774,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     var selectedTabIndex = 0; // 0: 기본, 1: 나의 것
     final sheetBuiltInMoodOptions = <MoodOption>[...kMoodOptions];
     final sheetCustomMoodOptions = <MoodOption>[..._customMoodOptions];
-    final pickedKey = await showModalBottomSheet<String>(
+    final pickedMood = await showModalBottomSheet<MoodOption>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -1703,28 +1862,62 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                           const SizedBox(width: 8),
                           FilledButton.icon(
                             onPressed: () async {
-                              final customBytes = await showDialog<Uint8List>(
-                                context: context,
-                                builder: (_) => const _CustomMoodDrawDialog(),
-                              );
-                              if (customBytes == null || !mounted) return;
-                              final key =
-                                  'custom_${DateTime.now().millisecondsSinceEpoch}';
-                              final newMood = MoodOption.custom(
-                                key: key,
-                                label: tr('커스텀', 'Custom'),
-                                customIconBytes: customBytes,
-                              );
-                              setState(() => _customMoodOptions.add(newMood));
+                              final mode = await _showIconAddModeSheet();
+                              if (mode == null || !mounted) return;
+                              if (mode == _IconAddMode.draw) {
+                                final customBytes = await showDialog<Uint8List>(
+                                  context: context,
+                                  builder: (_) => const _CustomMoodDrawDialog(),
+                                );
+                                if (customBytes == null || !mounted) return;
+                                final key =
+                                    'custom_${DateTime.now().millisecondsSinceEpoch}';
+                                final newMood = MoodOption.custom(
+                                  key: key,
+                                  label: tr('커스텀', 'Custom'),
+                                  customIconBytes: customBytes,
+                                );
+                                setState(() => _customMoodOptions.add(newMood));
+                                setSheetState(() {
+                                  sheetCustomMoodOptions.add(newMood);
+                                  selectedTabIndex = 1;
+                                  deleteMode = false;
+                                  isLoadingCustomMoods = false;
+                                });
+                                final saved = await _saveCustomMoodToStorage(
+                                  key,
+                                  customBytes,
+                                );
+                                if (!saved && mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        tr(
+                                          '아이콘 저장 정보 동기화에 실패했어요. 다시 시도해주세요.',
+                                          'Failed to sync icon metadata. Please try again.',
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return;
+                              }
+
+                              final photoMood =
+                                  await _pickCalendarOnlyPhotoMood();
+                              if (photoMood == null || !mounted) {
+                                return;
+                              }
+                              setState(() => _customMoodOptions.add(photoMood));
                               setSheetState(() {
-                                sheetCustomMoodOptions.add(newMood);
+                                sheetCustomMoodOptions.add(photoMood);
                                 selectedTabIndex = 1;
                                 deleteMode = false;
                                 isLoadingCustomMoods = false;
                               });
                               final saved = await _saveCustomMoodToStorage(
-                                key,
-                                customBytes,
+                                photoMood.key,
+                                photoMood.customIconBytes!,
                               );
                               if (!saved && mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1834,7 +2027,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                             ? null
                                             : () => Navigator.of(
                                                 sheetContext,
-                                              ).pop(mood.key),
+                                              ).pop(mood),
                                         child: Center(
                                           child: _buildMoodAsset(
                                             mood,
@@ -1902,17 +2095,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     );
     isSheetClosed = true;
 
-    if (!mounted || pickedKey == null) return;
+    if (!mounted || pickedMood == null) return;
 
-    final mood = _moodByKey[pickedKey];
     final customBase64 =
-        mood?.customIconBase64 ??
-        (mood?.customIconBytes != null
-            ? base64Encode(mood!.customIconBytes!)
+        pickedMood.customIconBase64 ??
+        (pickedMood.customIconBytes != null
+            ? base64Encode(pickedMood.customIconBytes!)
             : null);
 
     await _openWritePageWithMood(
-      pickedKey,
+      pickedMood.key,
       initialMoodCustomBase64: customBase64,
     );
   }
@@ -2621,7 +2813,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                         builder: (context, constraints) {
                           final cellWidth = constraints.maxWidth / 7;
                           final rowHeight = cellWidth.clamp(32.0, 40.0);
-                          final emojiSize = math.min(rowHeight * 0.72, 29.0);
+                          final emojiSize = math.min(rowHeight * 0.64, 25.0);
                           final dayTextSize = (rowHeight * 0.30).clamp(
                             12.0,
                             15.0,
@@ -2775,7 +2967,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     final hasDiary = diary != null;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+      margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: isSelected ? const Color(0xFFE8E8E8) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
@@ -4105,6 +4298,10 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     return '${_selectedDate.year.toString().padLeft(4, '0')}.${_selectedDate.month.toString().padLeft(2, '0')}.${_selectedDate.day.toString().padLeft(2, '0')}';
   }
 
+  String _buildDiaryDocId(DateTime timestamp) {
+    return '${timestamp.year.toString().padLeft(4, '0')}${timestamp.month.toString().padLeft(2, '0')}${timestamp.day.toString().padLeft(2, '0')}_${timestamp.hour.toString().padLeft(2, '0')}${timestamp.minute.toString().padLeft(2, '0')}${timestamp.second.toString().padLeft(2, '0')}_${timestamp.millisecond.toString().padLeft(3, '0')}';
+  }
+
   Future<void> _saveDiary() async {
     final title = _titleController.text.trim();
     final draftText = _draftBlocks
@@ -4160,10 +4357,11 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         final removedImageUrls = previousImageUrls.difference(currentImageUrls);
         await _deleteStorageFiles(removedImageUrls);
       } else {
-        await FirebaseFirestore.instance.collection(widget.userEmail).add({
-          ...payload,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        final docId = _buildDiaryDocId(DateTime.now());
+        await FirebaseFirestore.instance
+            .collection(widget.userEmail)
+            .doc(docId)
+            .set({...payload, 'createdAt': FieldValue.serverTimestamp()});
       }
       if (mounted) {
         Navigator.of(context).pop();
@@ -4634,6 +4832,229 @@ class _CustomMoodDrawDialog extends StatefulWidget {
 
   @override
   State<_CustomMoodDrawDialog> createState() => _CustomMoodDrawDialogState();
+}
+
+class _PhotoMoodCropDialog extends StatefulWidget {
+  const _PhotoMoodCropDialog({required this.sourceBytes});
+
+  final Uint8List sourceBytes;
+
+  @override
+  State<_PhotoMoodCropDialog> createState() => _PhotoMoodCropDialogState();
+}
+
+class _PhotoMoodCropDialogState extends State<_PhotoMoodCropDialog> {
+  static const double _cropSize = 280;
+  static const double _outputSize = 512;
+
+  final TransformationController _controller = TransformationController();
+  ui.Image? _image;
+  Size? _baseImageSize;
+  bool _loading = true;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImage();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _image?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadImage() async {
+    try {
+      final codec = await ui.instantiateImageCodec(widget.sourceBytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final coverScale = math.max(
+        _cropSize / image.width,
+        _cropSize / image.height,
+      );
+      final baseSize = Size(
+        image.width * coverScale,
+        image.height * coverScale,
+      );
+      _image = image;
+      _baseImageSize = baseSize;
+      _controller.value = Matrix4.identity()
+        ..translate(
+          (_cropSize - baseSize.width) / 2,
+          (_cropSize - baseSize.height) / 2,
+        );
+      if (!mounted) return;
+      setState(() => _loading = false);
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _clampTransform() {
+    final baseSize = _baseImageSize;
+    if (baseSize == null) return;
+    final matrix = _controller.value.clone();
+    final scale = matrix.getMaxScaleOnAxis();
+    final scaledWidth = baseSize.width * scale;
+    final scaledHeight = baseSize.height * scale;
+    final minX = _cropSize - scaledWidth;
+    final minY = _cropSize - scaledHeight;
+    final clampedX = matrix.storage[12].clamp(minX, 0.0);
+    final clampedY = matrix.storage[13].clamp(minY, 0.0);
+    matrix.storage[12] = clampedX;
+    matrix.storage[13] = clampedY;
+    if (matrix != _controller.value) {
+      _controller.value = matrix;
+    }
+  }
+
+  Future<void> _saveCrop() async {
+    if (_saving || _image == null || _baseImageSize == null) return;
+    setState(() => _saving = true);
+    try {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      final scale = _outputSize / _cropSize;
+      canvas.scale(scale);
+      canvas.clipPath(
+        Path()..addOval(const Rect.fromLTWH(0, 0, _cropSize, _cropSize)),
+      );
+      canvas.transform(_controller.value.storage);
+      canvas.drawImageRect(
+        _image!,
+        Rect.fromLTWH(
+          0,
+          0,
+          _image!.width.toDouble(),
+          _image!.height.toDouble(),
+        ),
+        Offset.zero & _baseImageSize!,
+        Paint(),
+      );
+      final rendered = await recorder.endRecording().toImage(
+        _outputSize.toInt(),
+        _outputSize.toInt(),
+      );
+      final byteData = await rendered.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(byteData?.buffer.asUint8List());
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } finally {
+      if (mounted) {
+        setState(() => _saving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
+      backgroundColor: const Color(0xFF181A20),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Text(
+                  tr('사진 아이콘 자르기', 'Crop Photo Icon'),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                  child: Text(
+                    tr('취소', 'Cancel'),
+                    style: const TextStyle(color: Color(0xFFD1D5DB)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              tr(
+                '사진을 움직이거나 확대해서 원 안에 원하는 부분을 맞춰주세요.',
+                'Move or zoom the photo to fit the part you want inside the circle.',
+              ),
+              style: const TextStyle(
+                color: Color(0xFF9CA3AF),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: _cropSize,
+              height: _cropSize,
+              child: _loading || _image == null || _baseImageSize == null
+                  ? const Center(child: CircularProgressIndicator())
+                  : ClipRect(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          InteractiveViewer(
+                            transformationController: _controller,
+                            minScale: 1,
+                            maxScale: 4,
+                            constrained: false,
+                            boundaryMargin: const EdgeInsets.all(
+                              double.infinity,
+                            ),
+                            onInteractionEnd: (_) => _clampTransform(),
+                            child: SizedBox(
+                              width: _baseImageSize!.width,
+                              height: _baseImageSize!.height,
+                              child: RawImage(image: _image, fit: BoxFit.fill),
+                            ),
+                          ),
+                          IgnorePointer(
+                            child: CustomPaint(
+                              painter: _CircleCropOverlayPainter(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: (_loading || _saving) ? null : _saveCrop,
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: const Color(0xFF111827),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(tr('이 부분으로 사용', 'Use This Crop')),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
@@ -5711,6 +6132,30 @@ class _DashedCircleBorderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DashedCircleBorderPainter oldDelegate) => false;
+}
+
+class _CircleCropOverlayPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final overlayPath = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addOval(Rect.fromLTWH(0, 0, size.width, size.height));
+    canvas.drawPath(
+      overlayPath,
+      Paint()..color = Colors.black.withValues(alpha: 0.42),
+    );
+    canvas.drawOval(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..color = Colors.white,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _DraftContentBlock {
