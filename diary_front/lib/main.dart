@@ -726,7 +726,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       }
 
       if (cleanedRows.isNotEmpty &&
-          (usedStorageFallback || cleanedRows.length != moods.length || !doc.exists)) {
+          (usedStorageFallback ||
+              cleanedRows.length != moods.length ||
+              !doc.exists)) {
         await _userCollection.doc('_custom_moods').set({'moods': cleanedRows});
       }
       if (!mounted) return;
@@ -1110,6 +1112,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           docId: docId,
           initialTitle: (data['title'] ?? '').toString(),
           initialContentBlocks: _contentBlocksFromData(data),
+          initialCustomMoodOptions: List<MoodOption>.from(_customMoodOptions),
         ),
       ),
     );
@@ -1425,6 +1428,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           initialDate: _selectedDay,
           initialMoodKey: initialMoodKey,
           initialMoodCustomBase64: initialMoodCustomBase64,
+          initialCustomMoodOptions: List<MoodOption>.from(_customMoodOptions),
         ),
       ),
     );
@@ -1603,8 +1607,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   }
 
   Future<void> _openMoodPickerAndWrite() async {
-    await _loadCustomMoods();
     if (!mounted) return;
+    var isLoadingCustomMoods = _customMoodOptions.isEmpty;
+    var didStartCustomMoodRefresh = false;
+    var isSheetClosed = false;
     var deleteMode = false;
     var selectedTabIndex = 0; // 0: 기본, 1: 나의 것
     final sheetBuiltInMoodOptions = <MoodOption>[...kMoodOptions];
@@ -1616,6 +1622,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (builderContext, setSheetState) {
+            if (isLoadingCustomMoods && !didStartCustomMoodRefresh) {
+              didStartCustomMoodRefresh = true;
+              _loadCustomMoods().then((_) {
+                if (!mounted || isSheetClosed) return;
+                setSheetState(() {
+                  isLoadingCustomMoods = false;
+                  sheetCustomMoodOptions
+                    ..clear()
+                    ..addAll(_customMoodOptions);
+                });
+              });
+            }
             return FractionallySizedBox(
               heightFactor: 0.9,
               child: Container(
@@ -1702,6 +1720,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                 sheetCustomMoodOptions.add(newMood);
                                 selectedTabIndex = 1;
                                 deleteMode = false;
+                                isLoadingCustomMoods = false;
                               });
                               final saved = await _saveCustomMoodToStorage(
                                 key,
@@ -1771,6 +1790,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                             final visibleMoods = selectedTabIndex == 0
                                 ? sheetBuiltInMoodOptions
                                 : sheetCustomMoodOptions;
+                            if (selectedTabIndex == 1 && isLoadingCustomMoods) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
                             if (visibleMoods.isEmpty) {
                               return Center(
                                 child: Text(
@@ -1876,6 +1900,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         );
       },
     );
+    isSheetClosed = true;
 
     if (!mounted || pickedKey == null) return;
 
@@ -2590,13 +2615,13 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                     Expanded(child: _buildDiaryListView(diaries))
                   else ...[
                     Container(
-                      padding: const EdgeInsets.fromLTRB(12, 54, 12, 38),
+                      padding: const EdgeInsets.fromLTRB(12, 52, 12, 46),
                       decoration: _calendarDecoration(),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
                           final cellWidth = constraints.maxWidth / 7;
-                          final rowHeight = cellWidth.clamp(34.0, 42.0);
-                          final emojiSize = math.min(rowHeight * 0.78, 32.0);
+                          final rowHeight = cellWidth.clamp(32.0, 40.0);
+                          final emojiSize = math.min(rowHeight * 0.72, 29.0);
                           final dayTextSize = (rowHeight * 0.30).clamp(
                             12.0,
                             15.0,
@@ -3325,6 +3350,7 @@ class NewDiaryPage extends StatefulWidget {
     required this.userEmail,
     required this.initialDate,
     required this.initialMoodKey,
+    required this.initialCustomMoodOptions,
     this.initialMoodCustomBase64,
     this.docId,
     this.initialTitle,
@@ -3334,6 +3360,7 @@ class NewDiaryPage extends StatefulWidget {
   final String userEmail;
   final DateTime initialDate;
   final String initialMoodKey;
+  final List<MoodOption> initialCustomMoodOptions;
   final String? initialMoodCustomBase64;
   final String? docId;
   final String? initialTitle;
@@ -3390,92 +3417,10 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     } else {
       _draftBlocks = [_createTextBlock()];
     }
-    _loadCustomMoods();
+    _customMoodOptions.addAll(widget.initialCustomMoodOptions);
     _ensureAssetsCached().then((_) {
       if (mounted) setState(() {});
     });
-  }
-
-  Future<void> _loadCustomMoods() async {
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection(widget.userEmail)
-          .doc('_custom_moods')
-          .get();
-      final moods = doc.exists
-          ? ((doc.data()?['moods'] as List<dynamic>?) ?? <dynamic>[])
-          : <dynamic>[];
-      final seenKeys = <String>{};
-      final seenUrls = <String>{};
-      final uniqueMoodRows = <Map<String, dynamic>>[];
-
-      for (final raw in moods) {
-        if (raw is! Map) continue;
-        final moodData = raw.map((k, v) => MapEntry(k.toString(), v));
-        final key = (moodData['key'] ?? '').toString();
-        final storageUrl = (moodData['storageUrl'] ?? '').toString();
-        final storagePath = (moodData['storagePath'] ?? '').toString();
-        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty))
-          continue;
-        if (seenKeys.contains(key) || seenUrls.contains(storageUrl)) continue;
-        seenKeys.add(key);
-        if (storageUrl.isNotEmpty) seenUrls.add(storageUrl);
-        uniqueMoodRows.add({
-          'key': key,
-          'storageUrl': storageUrl,
-          'storagePath': storagePath,
-        });
-      }
-      var usedStorageFallback = false;
-      if (uniqueMoodRows.isEmpty) {
-        uniqueMoodRows.addAll(await _listMoodRowsFromStorage(widget.userEmail));
-        usedStorageFallback = uniqueMoodRows.isNotEmpty;
-      }
-
-      final loadedOptions = <MoodOption>[];
-      final cleanedRows = <Map<String, dynamic>>[];
-      final seenImageSignatures = <String>{};
-      for (final moodData in uniqueMoodRows) {
-        final key = (moodData['key'] ?? '').toString();
-        final storageUrl = (moodData['storageUrl'] ?? '').toString();
-        final storagePath = (moodData['storagePath'] ?? '').toString();
-        try {
-          final ref = storageUrl.isNotEmpty
-              ? FirebaseStorage.instance.refFromURL(storageUrl)
-              : FirebaseStorage.instance.ref().child(storagePath);
-          final bytes = await ref.getData();
-          if (bytes == null || !mounted) continue;
-          final signature = base64Encode(bytes);
-          if (seenImageSignatures.contains(signature)) continue;
-          seenImageSignatures.add(signature);
-          cleanedRows.add({
-            'key': key,
-            'storageUrl': storageUrl,
-            'storagePath': ref.fullPath,
-          });
-          loadedOptions.add(
-            MoodOption.custom(
-              key: key,
-              label: tr('커스텀', 'Custom'),
-              customIconBytes: bytes,
-            ),
-          );
-        } catch (_) {}
-      }
-      if (cleanedRows.isNotEmpty &&
-          (usedStorageFallback || cleanedRows.length != moods.length || !doc.exists)) {
-        await FirebaseFirestore.instance
-            .collection(widget.userEmail)
-            .doc('_custom_moods')
-            .set({'moods': cleanedRows});
-      }
-      if (!mounted) return;
-      setState(() {
-        _customMoodOptions
-          ..clear()
-          ..addAll(loadedOptions);
-      });
-    } catch (_) {}
   }
 
   @override
@@ -3505,8 +3450,6 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
   }
 
   Future<void> _pickEditorMood() async {
-    await _loadCustomMoods();
-    if (!mounted) return;
     final picked = await showModalBottomSheet<MoodOption>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -3631,6 +3574,16 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
 
   void _dismissKeyboard() {
     FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void _toggleKeyboardForEditor() {
+    if (_saving) return;
+    final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
+    if (isKeyboardOpen) {
+      _dismissKeyboard();
+    } else {
+      _focusLastTextBlock();
+    }
   }
 
   int? _nextTextBlockIndex(int fromIndex) {
@@ -4132,7 +4085,9 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       }
       _lastAiUndoTargets = null;
     });
-    _showSnackBar(tr('AI 변환 전 상태로 되돌렸습니다.', 'Restored text before AI rewrite.'));
+    _showSnackBar(
+      tr('AI 변환 전 상태로 되돌렸습니다.', 'Restored text before AI rewrite.'),
+    );
   }
 
   Future<void> _handleAiButtonPressed() async {
@@ -4228,9 +4183,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     VoidCallback? onAction,
   }) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         action: (actionLabel != null && onAction != null)
@@ -4353,7 +4306,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       ),
       body: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onTap: _dismissKeyboard,
+        onTap: _saving ? null : _toggleKeyboardForEditor,
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
@@ -4463,7 +4416,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
                         Expanded(
                           child: GestureDetector(
                             behavior: HitTestBehavior.opaque,
-                            onTap: _saving ? null : _focusLastTextBlock,
+                            onTap: _saving ? null : _toggleKeyboardForEditor,
                             child: ListView.builder(
                               itemCount: _draftBlocks.length,
                               itemBuilder: (context, index) {
@@ -5447,7 +5400,9 @@ List<Color> _buildColorBoardPalette() {
   return result;
 }
 
-Future<List<Map<String, dynamic>>> _listMoodRowsFromStorage(String userEmail) async {
+Future<List<Map<String, dynamic>>> _listMoodRowsFromStorage(
+  String userEmail,
+) async {
   try {
     final folderRef = FirebaseStorage.instance
         .ref()
@@ -5460,13 +5415,10 @@ Future<List<Map<String, dynamic>>> _listMoodRowsFromStorage(String userEmail) as
         final url = await item.getDownloadURL();
         final fileName = item.name;
         final dotIndex = fileName.lastIndexOf('.');
-        final key = (dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName).trim();
+        final key = (dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName)
+            .trim();
         if (key.isEmpty) continue;
-        rows.add({
-          'key': key,
-          'storageUrl': url,
-          'storagePath': item.fullPath,
-        });
+        rows.add({'key': key, 'storageUrl': url, 'storagePath': item.fullPath});
       } catch (_) {}
     }
     return rows;
