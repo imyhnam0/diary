@@ -26,22 +26,23 @@ import WidgetKit
           result(FlutterError(code: "UNAVAILABLE", message: "AppDelegate unavailable", details: nil))
           return
         }
-        guard call.method == "updateDiaryWidget" else {
-          result(FlutterMethodNotImplemented)
+        guard let defaults = UserDefaults(suiteName: self.appGroupId) else {
+          result(FlutterError(code: "APP_GROUP_ERROR", message: "Failed to open app group", details: nil))
           return
         }
-        guard let args = call.arguments as? [String: Any] else {
-          result(FlutterError(code: "BAD_ARGS", message: "Expected payload dictionary", details: nil))
-          return
-        }
-        let today = (args["today"] as? String) ?? ""
-        let todayImage = (args["todayImage"] as? String) ?? ""
-        let recent = (args["recent"] as? [String]) ?? []
-        let recentImages = (args["recentImages"] as? [String]) ?? []
-        let month = (args["month"] as? String) ?? ""
-        let monthMap = (args["monthMap"] as? [String: String]) ?? [:]
-        let monthMapImages = (args["monthMapImages"] as? [String: String]) ?? [:]
-        if let defaults = UserDefaults(suiteName: self.appGroupId) {
+        switch call.method {
+        case "updateDiaryWidget":
+          guard let args = call.arguments as? [String: Any] else {
+            result(FlutterError(code: "BAD_ARGS", message: "Expected payload dictionary", details: nil))
+            return
+          }
+          let today = (args["today"] as? String) ?? ""
+          let todayImage = (args["todayImage"] as? String) ?? ""
+          let recent = (args["recent"] as? [String]) ?? []
+          let recentImages = (args["recentImages"] as? [String]) ?? []
+          let month = (args["month"] as? String) ?? ""
+          let monthMap = (args["monthMap"] as? [String: String]) ?? [:]
+          let monthMapImages = (args["monthMapImages"] as? [String: String]) ?? [:]
           defaults.set(today, forKey: "widget_today_emoji")
           defaults.set(todayImage, forKey: "widget_today_image_base64")
           defaults.set(recent, forKey: "widget_recent_emojis")
@@ -49,15 +50,20 @@ import WidgetKit
           defaults.set(month, forKey: "widget_month_key")
           defaults.set(monthMap, forKey: "widget_month_map")
           defaults.set(monthMapImages, forKey: "widget_month_map_images")
-          defaults.set(Date().timeIntervalSince1970, forKey: "widget_updated_at")
-          defaults.synchronize()
-          if #available(iOS 14.0, *) {
-            WidgetCenter.shared.reloadAllTimelines()
-          }
-          result(nil)
-        } else {
-          result(FlutterError(code: "APP_GROUP_ERROR", message: "Failed to open app group", details: nil))
+        case "syncWidgetLanguage":
+          let args = call.arguments as? [String: Any]
+          let language = (args?["language"] as? String) ?? "ko"
+          defaults.set(language, forKey: "widget_language")
+        default:
+          result(FlutterMethodNotImplemented)
+          return
         }
+        defaults.set(Date().timeIntervalSince1970, forKey: "widget_updated_at")
+        defaults.synchronize()
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadAllTimelines()
+        }
+        result(nil)
       }
     }
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)

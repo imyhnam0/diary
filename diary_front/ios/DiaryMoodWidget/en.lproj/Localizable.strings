@@ -1,0 +1,6 @@
+"WIDGET_TODAY_NAME" = "Diary Today";
+"WIDGET_TODAY_DESCRIPTION" = "Shows today's mood emoji.";
+"WIDGET_MONTH_NAME" = "Diary Month";
+"WIDGET_MONTH_DESCRIPTION" = "Shows this month's mood summary.";
+"WIDGET_CALENDAR_NAME" = "Diary Calendar";
+"WIDGET_CALENDAR_DESCRIPTION" = "Shows mood emojis recorded on the calendar.";

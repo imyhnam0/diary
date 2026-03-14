@@ -17,6 +17,7 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		A10000000000000000000001 /* DiaryMoodWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* DiaryMoodWidget.swift */; };
 		A10000000000000000000002 /* DiaryMoodWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* DiaryMoodWidget.appex */; };
+		A10000000000000000000016 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* Localizable.strings */; };
 		A2D89C3929DA2FDD725AED23 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 73B9592DD4AD6321174528BC /* Pods_Runner.framework */; };
 		AD647CF53FA008E38DA57119 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = C65D5371D7E7464766749718 /* GoogleService-Info.plist */; };
 /* End PBXBuildFile section */
@@ -86,6 +87,8 @@
 		A10000000000000000000013 /* DiaryMoodWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DiaryMoodWidget.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000014 /* DiaryMoodWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DiaryMoodWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000015 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
+		A10000000000000000000017 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		A10000000000000000000018 /* ko */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ko; path = ko.lproj/Localizable.strings; sourceTree = "<group>"; };
 		C65D5371D7E7464766749718 /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		CBC653DF8D8B964B41224A82 /* Pods-RunnerTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.debug.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.debug.xcconfig"; sourceTree = "<group>"; };
 		D3979E6506628CF809D710AE /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
@@ -208,6 +211,7 @@
 				A10000000000000000000011 /* DiaryMoodWidget.swift */,
 				A10000000000000000000012 /* Info.plist */,
 				A10000000000000000000013 /* DiaryMoodWidget.entitlements */,
+				A10000000000000000000019 /* Localizable.strings */,
 			);
 			path = DiaryMoodWidget;
 			sourceTree = "<group>";
@@ -304,6 +308,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				ko,
 				Base,
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
@@ -342,6 +347,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000016 /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -498,6 +504,15 @@
 				97C147001CF9000F007C117D /* Base */,
 			);
 			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000019 /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				A10000000000000000000017 /* en */,
+				A10000000000000000000018 /* ko */,
+			);
+			name = Localizable.strings;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */

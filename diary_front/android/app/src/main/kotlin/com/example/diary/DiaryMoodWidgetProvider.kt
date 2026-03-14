@@ -35,6 +35,7 @@ class DiaryMoodWidgetProvider : AppWidgetProvider() {
         private const val KEY_MONTH = "flutter.widget_month_key"
         private const val KEY_MONTH_MAP = "flutter.widget_month_map_json"
         private const val KEY_MONTH_MAP_IMAGES = "flutter.widget_month_map_images_json"
+        private const val KEY_LANGUAGE = "flutter.widget_language"
 
         fun updateAllWidgets(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -52,6 +53,11 @@ class DiaryMoodWidgetProvider : AppWidgetProvider() {
         ) {
             val views = RemoteViews(context.packageName, R.layout.diary_mood_widget)
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val languageCode = prefs.getString(KEY_LANGUAGE, "ko") ?: "ko"
+            val isEnglish = languageCode == "en"
+
+            views.setTextViewText(R.id.widget_today_label, if (isEnglish) "TODAY" else "오늘")
+            views.setTextViewText(R.id.widget_recent_label, if (isEnglish) "RECENT" else "최근")
 
             val todayEmoji = prefs.getString(KEY_TODAY, "") ?: ""
             val todayImage = prefs.getString(KEY_TODAY_IMAGE, "") ?: ""
@@ -62,7 +68,7 @@ class DiaryMoodWidgetProvider : AppWidgetProvider() {
                 imageViewId = R.id.widget_today_icon,
                 emoji = if (hasTodayRecord) todayEmoji else "",
                 imageBase64 = if (hasTodayRecord) todayImage else "",
-                emptyText = "없음"
+                emptyText = if (isEnglish) "None" else "없음"
             )
 
             val recent = parseRecentEmojis(prefs.getString(KEY_RECENT, "[]") ?: "[]")

@@ -22,6 +22,8 @@ enum AppLanguage { ko, en }
 final ValueNotifier<AppLanguage> appLanguageNotifier =
     ValueNotifier<AppLanguage>(AppLanguage.ko);
 const _languagePrefKey = 'app_language';
+const _widgetLanguageKey = 'widget_language';
+const _widgetChannel = MethodChannel('diary/home_widget');
 
 bool get isEnglish => appLanguageNotifier.value == AppLanguage.en;
 
@@ -37,6 +39,17 @@ Future<void> _loadSavedLanguage() async {
   }
 }
 
+Future<void> _syncWidgetLanguage() async {
+  final languageCode = isEnglish ? 'en' : 'ko';
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString(_widgetLanguageKey, languageCode);
+  try {
+    await _widgetChannel.invokeMethod('syncWidgetLanguage', {
+      'language': languageCode,
+    });
+  } catch (_) {}
+}
+
 Future<void> setAppLanguage(AppLanguage language) async {
   if (appLanguageNotifier.value != language) {
     appLanguageNotifier.value = language;
@@ -46,6 +59,7 @@ Future<void> setAppLanguage(AppLanguage language) async {
     _languagePrefKey,
     language == AppLanguage.en ? 'en' : 'ko',
   );
+  await _syncWidgetLanguage();
 }
 
 Future<void> main() async {
@@ -66,6 +80,7 @@ Future<void> main() async {
   }
 
   runApp(DiaryApp(firebaseError: firebaseError));
+  await _syncWidgetLanguage();
 }
 
 class DiaryApp extends StatelessWidget {
@@ -631,9 +646,6 @@ class DiaryHomePage extends StatefulWidget {
 enum _IconAddMode { draw, photo }
 
 class _DiaryHomePageState extends State<DiaryHomePage> {
-  static const MethodChannel _widgetChannel = MethodChannel(
-    'diary/home_widget',
-  );
   static const int _customMoodPageSize = 24;
 
   late DateTime _focusedDay;
@@ -641,7 +653,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   late DateTime _listMonthAnchor;
   bool _isListMode = false;
   final List<MoodOption> _customMoodOptions = [];
-  final Map<String, Uint8List> _customMoodBytesCache = {};
+  late final Map<String, Uint8List> _customMoodBytesCache;
+  late bool _hasLoadedCustomMoods;
   String? _lastWidgetPayload;
 
   Map<String, MoodOption> get _moodByKey {
@@ -656,13 +669,81 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     _focusedDay = now;
     _selectedDay = _normalizeDate(now);
     _listMonthAnchor = DateTime(now.year, now.month, 1);
+    _customMoodBytesCache = _sharedCustomMoodBytesCache(widget.userEmail);
+    _hasLoadedCustomMoods = _globalLoadedCustomMoodUsers.contains(
+      widget.userEmail,
+    );
+    final cachedCustomMoods = _globalCustomMoodOptionsCache[widget.userEmail];
+    if (cachedCustomMoods != null && cachedCustomMoods.isNotEmpty) {
+      _customMoodOptions.addAll(cachedCustomMoods);
+    }
     _ensureAssetsCached().then((_) {
       if (mounted) setState(() {});
     });
-    _loadCustomMoods();
+    if (!_hasLoadedCustomMoods) {
+      _loadCustomMoods();
+    }
   }
 
-  Future<void> _loadCustomMoods() async {
+  MoodOption _hydrateCustomMoodOption(MoodOption mood) {
+    final inlineBytes = mood.customIconBytes;
+    if (inlineBytes != null && inlineBytes.isNotEmpty) {
+      _customMoodBytesCache[mood.key] = inlineBytes;
+      return mood;
+    }
+    Uint8List? cachedBytes = _customMoodBytesCache[mood.key];
+    if ((mood.customIconBase64 ?? '').isNotEmpty) {
+      try {
+        cachedBytes ??= base64Decode(mood.customIconBase64!);
+        if (cachedBytes.isNotEmpty) {
+          _customMoodBytesCache[mood.key] = cachedBytes;
+        }
+      } catch (_) {}
+    }
+    if (cachedBytes != null && cachedBytes.isNotEmpty) {
+      return MoodOption.custom(
+        key: mood.key,
+        label: mood.label,
+        customIconBase64: mood.customIconBase64,
+        customIconBytes: cachedBytes,
+        storageUrl: mood.storageUrl,
+        storagePath: mood.storagePath,
+        thumbnailUrl: mood.thumbnailUrl,
+        thumbnailPath: mood.thumbnailPath,
+      );
+    }
+    return mood;
+  }
+
+  int _customMoodSortValue(MoodOption mood) {
+    final match = RegExp(r'_(\d+)$').firstMatch(mood.key);
+    return int.tryParse(match?.group(1) ?? '') ?? 0;
+  }
+
+  void _sortCustomMoodsNewestFirst(List<MoodOption> moods) {
+    moods.sort((a, b) {
+      final byTimestamp = _customMoodSortValue(
+        b,
+      ).compareTo(_customMoodSortValue(a));
+      if (byTimestamp != 0) {
+        return byTimestamp;
+      }
+      return b.key.compareTo(a.key);
+    });
+  }
+
+  void _cacheCustomMoodOptions(Iterable<MoodOption> moods) {
+    final sorted = moods.map(_hydrateCustomMoodOption).toList(growable: false);
+    _sortCustomMoodsNewestFirst(sorted);
+    _globalCustomMoodOptionsCache[widget.userEmail] = sorted;
+    _globalLoadedCustomMoodUsers.add(widget.userEmail);
+    _hasLoadedCustomMoods = true;
+  }
+
+  Future<void> _loadCustomMoods({bool forceRefresh = false}) async {
+    if (_hasLoadedCustomMoods && !forceRefresh) {
+      return;
+    }
     try {
       final doc = await _userCollection.doc('_custom_moods').get();
       final moods = doc.exists
@@ -720,13 +801,15 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           'thumbnailPath': thumbnailPath,
         });
         loadedOptions.add(
-          MoodOption.custom(
-            key: key,
-            label: tr('커스텀', 'Custom'),
-            storageUrl: storageUrl,
-            storagePath: storagePath,
-            thumbnailUrl: thumbnailUrl,
-            thumbnailPath: thumbnailPath,
+          _hydrateCustomMoodOption(
+            MoodOption.custom(
+              key: key,
+              label: tr('커스텀', 'Custom'),
+              storageUrl: storageUrl,
+              storagePath: storagePath,
+              thumbnailUrl: thumbnailUrl,
+              thumbnailPath: thumbnailPath,
+            ),
           ),
         );
       }
@@ -737,6 +820,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           cleanedRows.isNotEmpty) {
         await _userCollection.doc('_custom_moods').set({'moods': cleanedRows});
       }
+      _sortCustomMoodsNewestFirst(loadedOptions);
+      _cacheCustomMoodOptions(loadedOptions);
       if (!mounted) return;
       setState(() {
         _customMoodOptions
@@ -1028,6 +1113,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         _customMoodOptions.removeWhere((mood) => mood.key == key);
         _customMoodBytesCache.remove(key);
       });
+      _cacheCustomMoodOptions(_customMoodOptions);
     } catch (_) {}
   }
 
@@ -1186,6 +1272,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   }
 
   Future<void> _openEditPage(String docId, Map<String, dynamic> data) async {
+    final resolvedMood = _resolveMoodFromDiary(data);
+    final initialMoodKeyRaw = (data['moodKey'] ?? '').toString();
+    final initialCustomMoodOptions = List<MoodOption>.from(_customMoodOptions);
+    final isResolvedCustomMood =
+        resolvedMood != null &&
+        !kMoodOptions.any((m) => m.key == resolvedMood.key);
+    if (isResolvedCustomMood &&
+        initialCustomMoodOptions.every((m) => m.key != resolvedMood.key)) {
+      initialCustomMoodOptions.insert(0, resolvedMood);
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => NewDiaryPage(
@@ -1193,23 +1289,25 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           initialDate: (data['writtenAt'] is Timestamp)
               ? (data['writtenAt'] as Timestamp).toDate()
               : DateTime.now(),
-          initialMoodKey: (data['moodKey'] ?? '').toString(),
+          initialMoodKey: initialMoodKeyRaw.isNotEmpty
+              ? initialMoodKeyRaw
+              : (resolvedMood?.key ?? ''),
           initialMoodCustomBase64:
               (data['moodCustomIcon'] ?? '').toString().isEmpty
-              ? null
+              ? resolvedMood?.customIconBase64
               : data['moodCustomIcon'].toString(),
           initialMoodStorageUrl:
               (data['moodCustomStorageUrl'] ?? '').toString().isEmpty
-              ? null
+              ? resolvedMood?.storageUrl
               : data['moodCustomStorageUrl'].toString(),
           initialMoodStoragePath:
               (data['moodCustomStoragePath'] ?? '').toString().isEmpty
-              ? null
+              ? resolvedMood?.storagePath
               : data['moodCustomStoragePath'].toString(),
           docId: docId,
           initialTitle: (data['title'] ?? '').toString(),
           initialContentBlocks: _contentBlocksFromData(data),
-          initialCustomMoodOptions: List<MoodOption>.from(_customMoodOptions),
+          initialCustomMoodOptions: initialCustomMoodOptions,
         ),
       ),
     );
@@ -1574,8 +1672,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                   icon: Icons.photo_library_outlined,
                   title: tr('사진으로 넣기', 'Use Photo'),
                   subtitle: tr(
-                    '갤러리 사진을 원형으로 잘라 이번 달력에만 사용',
-                    'Crop a gallery photo into a circle for this calendar only',
+                    '갤러리 사진을 원형으로 잘라서 아이콘으로 만들기',
+                    'Crop a gallery photo into a circular icon',
                   ),
                   onTap: () =>
                       Navigator.of(sheetContext).pop(_IconAddMode.photo),
@@ -1765,7 +1863,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                     for (int y = minYear; y <= maxYear; y++)
                                       Center(
                                         child: Text(
-                                          isEnglish ? '$y' : '${y}년',
+                                          isEnglish ? '$y' : '$y년',
                                           style: const TextStyle(
                                             fontSize: 22,
                                             fontWeight: FontWeight.w600,
@@ -1789,7 +1887,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                     for (int m = 1; m <= 12; m++)
                                       Center(
                                         child: Text(
-                                          isEnglish ? '$m' : '${m}월',
+                                          isEnglish ? '$m' : '$m월',
                                           style: const TextStyle(
                                             fontSize: 22,
                                             fontWeight: FontWeight.w600,
@@ -1867,7 +1965,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
 
   Future<void> _openMoodPickerAndWrite() async {
     if (!mounted) return;
-    var isLoadingCustomMoods = _customMoodOptions.isEmpty;
+    var isLoadingCustomMoods = !_hasLoadedCustomMoods;
     var didStartCustomMoodRefresh = false;
     var isSheetClosed = false;
     var deleteMode = false;
@@ -1877,435 +1975,498 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         .toInt();
     final sheetBuiltInMoodOptions = <MoodOption>[...kMoodOptions];
     final sheetCustomMoodOptions = <MoodOption>[..._customMoodOptions];
-    final pickedMood = await showModalBottomSheet<MoodOption>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (builderContext, setSheetState) {
-            void safeSetSheetState(VoidCallback fn) {
-              if (!mounted || isSheetClosed) return;
-              setSheetState(fn);
-            }
+    final pickedMood =
+        await showModalBottomSheet<MoodOption>(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (sheetContext) {
+            return StatefulBuilder(
+              builder: (builderContext, setSheetState) {
+                void safeSetSheetState(VoidCallback fn) {
+                  if (!mounted || isSheetClosed) return;
+                  setSheetState(fn);
+                }
 
-            if (isLoadingCustomMoods && !didStartCustomMoodRefresh) {
-              didStartCustomMoodRefresh = true;
-              _loadCustomMoods().then((_) {
-                if (!mounted || isSheetClosed) return;
-                safeSetSheetState(() {
-                  isLoadingCustomMoods = false;
-                  sheetCustomMoodOptions
-                    ..clear()
-                    ..addAll(_customMoodOptions);
-                  mineVisibleCount = sheetCustomMoodOptions.length
-                      .clamp(0, _customMoodPageSize)
-                      .toInt();
-                });
-              });
-            }
-            return FractionallySizedBox(
-              heightFactor: 0.9,
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFCFCFD),
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-                ),
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                child: SafeArea(
-                  top: false,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFD4D7DD),
-                          borderRadius: BorderRadius.circular(99),
-                        ),
+                if (isLoadingCustomMoods && !didStartCustomMoodRefresh) {
+                  didStartCustomMoodRefresh = true;
+                  _loadCustomMoods().then((_) {
+                    if (!mounted || isSheetClosed) return;
+                    safeSetSheetState(() {
+                      isLoadingCustomMoods = false;
+                      sheetCustomMoodOptions
+                        ..clear()
+                        ..addAll(_customMoodOptions);
+                      _sortCustomMoodsNewestFirst(sheetCustomMoodOptions);
+                      mineVisibleCount = sheetCustomMoodOptions.length
+                          .clamp(0, _customMoodPageSize)
+                          .toInt();
+                    });
+                  });
+                }
+                return FractionallySizedBox(
+                  heightFactor: 0.9,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFCFCFD),
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(26),
                       ),
-                      const SizedBox(height: 12),
-                      Row(
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                    child: SafeArea(
+                      top: false,
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: Text(
-                              tr('오늘은 어떤 기분인가요?', 'How are you feeling today?'),
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF1F2937),
-                              ),
+                          Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFD4D7DD),
+                              borderRadius: BorderRadius.circular(99),
                             ),
                           ),
-                          if (selectedTabIndex == 1)
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                safeSetSheetState(() {
-                                  deleteMode = !deleteMode;
-                                });
-                              },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFF4B5563),
-                                side: const BorderSide(
-                                  color: Color(0xFFD1D5DB),
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              icon: Icon(
-                                deleteMode
-                                    ? Icons.check_circle_outline_rounded
-                                    : Icons.delete_outline_rounded,
-                                size: 16,
-                              ),
-                              label: Text(
-                                deleteMode
-                                    ? tr('완료', 'Done')
-                                    : tr('삭제', 'Delete'),
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                            ),
-                          const SizedBox(width: 8),
-                          FilledButton.icon(
-                            onPressed: () async {
-                              final mode = await _showIconAddModeSheet();
-                              if (mode == null || !mounted) return;
-                              if (mode == _IconAddMode.draw) {
-                                final rawCustomBytes =
-                                    await showDialog<Uint8List>(
-                                      context: context,
-                                      builder: (_) =>
-                                          const _CustomMoodDrawDialog(),
-                                    );
-                                if (rawCustomBytes == null || !mounted) return;
-                                final customBytes = _toCustomMoodJpegBytes(
-                                  rawCustomBytes,
-                                );
-                                final key =
-                                    'custom_${DateTime.now().millisecondsSinceEpoch}';
-                                final newMood = MoodOption.custom(
-                                  key: key,
-                                  label: tr('커스텀', 'Custom'),
-                                  customIconBytes: customBytes,
-                                );
-                                setState(() => _customMoodOptions.add(newMood));
-                                safeSetSheetState(() {
-                                  sheetCustomMoodOptions.add(newMood);
-                                  selectedTabIndex = 1;
-                                  deleteMode = false;
-                                  isLoadingCustomMoods = false;
-                                  mineVisibleCount =
-                                      sheetCustomMoodOptions.length;
-                                });
-                                final savedMood =
-                                    await _saveCustomMoodToStorage(
-                                      key,
-                                      customBytes,
-                                      label: newMood.label,
-                                    );
-                                if (savedMood == null && mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        tr(
-                                          '아이콘 저장 정보 동기화에 실패했어요. 다시 시도해주세요.',
-                                          'Failed to sync icon metadata. Please try again.',
-                                        ),
-                                      ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Spacer(),
+                              if (selectedTabIndex == 1)
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    safeSetSheetState(() {
+                                      deleteMode = !deleteMode;
+                                    });
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF4B5563),
+                                    side: const BorderSide(
+                                      color: Color(0xFFD1D5DB),
                                     ),
-                                  );
-                                } else if (savedMood != null && mounted) {
-                                  setState(() {
-                                    final index = _customMoodOptions.indexWhere(
-                                      (mood) => mood.key == key,
-                                    );
-                                    if (index >= 0) {
-                                      _customMoodOptions[index] = savedMood;
-                                    }
-                                  });
-                                  safeSetSheetState(() {
-                                    final index = sheetCustomMoodOptions
-                                        .indexWhere((mood) => mood.key == key);
-                                    if (index >= 0) {
-                                      sheetCustomMoodOptions[index] = savedMood;
-                                    }
-                                  });
-                                }
-                                return;
-                              }
-
-                              final photoMood =
-                                  await _pickCalendarOnlyPhotoMood();
-                              if (photoMood == null || !mounted) {
-                                return;
-                              }
-                              setState(() => _customMoodOptions.add(photoMood));
-                              safeSetSheetState(() {
-                                sheetCustomMoodOptions.add(photoMood);
-                                selectedTabIndex = 1;
-                                deleteMode = false;
-                                isLoadingCustomMoods = false;
-                                mineVisibleCount =
-                                    sheetCustomMoodOptions.length;
-                              });
-                              final savedMood = await _saveCustomMoodToStorage(
-                                photoMood.key,
-                                photoMood.customIconBytes!,
-                                label: photoMood.label,
-                              );
-                              if (savedMood == null && mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      tr(
-                                        '아이콘 저장 정보 동기화에 실패했어요. 다시 시도해주세요.',
-                                        'Failed to sync icon metadata. Please try again.',
-                                      ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                );
-                              } else if (savedMood != null && mounted) {
-                                setState(() {
-                                  final index = _customMoodOptions.indexWhere(
-                                    (mood) => mood.key == photoMood.key,
-                                  );
-                                  if (index >= 0) {
-                                    _customMoodOptions[index] = savedMood;
-                                  }
-                                  });
-                                  safeSetSheetState(() {
-                                    final index = sheetCustomMoodOptions
-                                        .indexWhere(
-                                        (mood) => mood.key == photoMood.key,
+                                  icon: Icon(
+                                    deleteMode
+                                        ? Icons.check_circle_outline_rounded
+                                        : Icons.delete_outline_rounded,
+                                    size: 16,
+                                  ),
+                                  label: Text(
+                                    deleteMode
+                                        ? tr('완료', 'Done')
+                                        : tr('삭제', 'Delete'),
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              const SizedBox(width: 8),
+                              FilledButton.icon(
+                                onPressed: () async {
+                                  final mode = await _showIconAddModeSheet();
+                                  if (mode == null || !mounted) return;
+                                  if (mode == _IconAddMode.draw) {
+                                    final rawCustomBytes =
+                                        await showDialog<Uint8List>(
+                                          context: context,
+                                          builder: (_) =>
+                                              const _CustomMoodDrawDialog(),
+                                        );
+                                    if (rawCustomBytes == null || !mounted) {
+                                      return;
+                                    }
+                                    final customBytes = _toCustomMoodJpegBytes(
+                                      rawCustomBytes,
+                                    );
+                                    final key =
+                                        'custom_${DateTime.now().millisecondsSinceEpoch}';
+                                    final newMood = MoodOption.custom(
+                                      key: key,
+                                      label: tr('커스텀', 'Custom'),
+                                      customIconBytes: customBytes,
+                                    );
+                                    final hydratedMood =
+                                        _hydrateCustomMoodOption(newMood);
+                                    setState(() {
+                                      _customMoodOptions.add(hydratedMood);
+                                      _sortCustomMoodsNewestFirst(
+                                        _customMoodOptions,
                                       );
-                                  if (index >= 0) {
-                                    sheetCustomMoodOptions[index] = savedMood;
-                                  }
-                                });
-                              }
-                            },
-                            style: FilledButton.styleFrom(
-                              backgroundColor: const Color(0xFF1E1E1E),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            icon: const Icon(Icons.add_rounded, size: 16),
-                            label: Text(
-                              tr('아이콘 추가', 'Add Icon'),
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          _buildMoodTab(
-                            label: tr('기본', 'Default'),
-                            selected: selectedTabIndex == 0,
-                            onTap: () {
-                              safeSetSheetState(() {
-                                selectedTabIndex = 0;
-                                deleteMode = false;
-                              });
-                            },
-                          ),
-                          const SizedBox(width: 14),
-                          _buildMoodTab(
-                            label: tr('나의 것', 'Mine'),
-                            selected: selectedTabIndex == 1,
-                            onTap: () {
-                              safeSetSheetState(() {
-                                selectedTabIndex = 1;
-                                mineVisibleCount = sheetCustomMoodOptions.length
-                                    .clamp(0, _customMoodPageSize)
-                                    .toInt();
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Expanded(
-                        child: Builder(
-                          builder: (_) {
-                            final visibleMoods = selectedTabIndex == 0
-                                ? sheetBuiltInMoodOptions
-                                : sheetCustomMoodOptions
-                                      .take(mineVisibleCount)
-                                      .toList();
-                            final hasMoreCustomMoods =
-                                selectedTabIndex == 1 &&
-                                mineVisibleCount <
-                                    sheetCustomMoodOptions.length;
-                            if (selectedTabIndex == 1 && isLoadingCustomMoods) {
-                              return const Center(
-                                child: CircularProgressIndicator(),
-                              );
-                            }
-                            if (visibleMoods.isEmpty) {
-                              return Center(
-                                child: Text(
-                                  tr(
-                                    '추가한 아이콘이 없어요.\n오른쪽 위에서 아이콘을 추가해보세요.',
-                                    'No custom icons yet.\nAdd one from the top-right button.',
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Color(0xFF6B7280),
-                                    height: 1.45,
-                                  ),
-                                ),
-                              );
-                            }
-                            return NotificationListener<ScrollNotification>(
-                              onNotification: (notification) {
-                                if (selectedTabIndex != 1 ||
-                                    !hasMoreCustomMoods ||
-                                    notification.metrics.axis !=
-                                        Axis.vertical) {
-                                  return false;
-                                }
-                                if (notification.metrics.extentAfter > 240) {
-                                  return false;
-                                }
-                                safeSetSheetState(() {
-                                  mineVisibleCount =
-                                      (mineVisibleCount + _customMoodPageSize)
-                                          .clamp(
-                                            0,
-                                            sheetCustomMoodOptions.length,
-                                          )
-                                          .toInt();
-                                });
-                                return false;
-                              },
-                              child: GridView.builder(
-                                itemCount:
-                                    visibleMoods.length +
-                                    (hasMoreCustomMoods ? 1 : 0),
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 3,
-                                      mainAxisSpacing: 14,
-                                      crossAxisSpacing: 8,
-                                      childAspectRatio: 1.05,
-                                    ),
-                                itemBuilder: (context, index) {
-                                  if (index >= visibleMoods.length) {
-                                    return Center(
-                                      child: Text(
-                                        tr('불러오는 중...', 'Loading...'),
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Color(0xFF9CA3AF),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                  final mood = visibleMoods[index];
-                                  final canDelete =
-                                      selectedTabIndex == 1 &&
-                                      _canDeleteCustomMood(mood.key);
-                                  return Stack(
-                                    children: [
-                                      Positioned.fill(
-                                        child: InkWell(
-                                          borderRadius: BorderRadius.circular(
-                                            14,
-                                          ),
-                                          onTap: deleteMode
-                                              ? null
-                                              : () => Navigator.of(
-                                                  sheetContext,
-                                                ).pop(mood),
-                                          child: Center(
-                                            child: _buildMoodAsset(
-                                              mood,
-                                              size: 56,
+                                      _cacheCustomMoodOptions(
+                                        _customMoodOptions,
+                                      );
+                                    });
+                                    safeSetSheetState(() {
+                                      sheetCustomMoodOptions.add(hydratedMood);
+                                      _sortCustomMoodsNewestFirst(
+                                        sheetCustomMoodOptions,
+                                      );
+                                      selectedTabIndex = 1;
+                                      deleteMode = false;
+                                      isLoadingCustomMoods = false;
+                                      mineVisibleCount =
+                                          sheetCustomMoodOptions.length;
+                                    });
+                                    final savedMood =
+                                        await _saveCustomMoodToStorage(
+                                          key,
+                                          customBytes,
+                                          label: newMood.label,
+                                        );
+                                    if (savedMood == null && mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            tr(
+                                              '아이콘 저장 정보 동기화에 실패했어요. 다시 시도해주세요.',
+                                              'Failed to sync icon metadata. Please try again.',
                                             ),
                                           ),
                                         ),
+                                      );
+                                    } else if (savedMood != null && mounted) {
+                                      setState(() {
+                                        final index = _customMoodOptions
+                                            .indexWhere(
+                                              (mood) => mood.key == key,
+                                            );
+                                        if (index >= 0) {
+                                          _customMoodOptions[index] =
+                                              _hydrateCustomMoodOption(
+                                                savedMood,
+                                              );
+                                        }
+                                        _sortCustomMoodsNewestFirst(
+                                          _customMoodOptions,
+                                        );
+                                        _cacheCustomMoodOptions(
+                                          _customMoodOptions,
+                                        );
+                                      });
+                                      safeSetSheetState(() {
+                                        final index = sheetCustomMoodOptions
+                                            .indexWhere(
+                                              (mood) => mood.key == key,
+                                            );
+                                        if (index >= 0) {
+                                          sheetCustomMoodOptions[index] =
+                                              _hydrateCustomMoodOption(
+                                                savedMood,
+                                              );
+                                        }
+                                        _sortCustomMoodsNewestFirst(
+                                          sheetCustomMoodOptions,
+                                        );
+                                      });
+                                    }
+                                    return;
+                                  }
+
+                                  final photoMood =
+                                      await _pickCalendarOnlyPhotoMood();
+                                  if (photoMood == null || !mounted) {
+                                    return;
+                                  }
+                                  final hydratedPhotoMood =
+                                      _hydrateCustomMoodOption(photoMood);
+                                  setState(() {
+                                    _customMoodOptions.add(hydratedPhotoMood);
+                                    _sortCustomMoodsNewestFirst(
+                                      _customMoodOptions,
+                                    );
+                                    _cacheCustomMoodOptions(_customMoodOptions);
+                                  });
+                                  safeSetSheetState(() {
+                                    sheetCustomMoodOptions.add(
+                                      hydratedPhotoMood,
+                                    );
+                                    _sortCustomMoodsNewestFirst(
+                                      sheetCustomMoodOptions,
+                                    );
+                                    selectedTabIndex = 1;
+                                    deleteMode = false;
+                                    isLoadingCustomMoods = false;
+                                    mineVisibleCount =
+                                        sheetCustomMoodOptions.length;
+                                  });
+                                  final savedMood =
+                                      await _saveCustomMoodToStorage(
+                                        photoMood.key,
+                                        photoMood.customIconBytes!,
+                                        label: photoMood.label,
+                                      );
+                                  if (savedMood == null && mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          tr(
+                                            '아이콘 저장 정보 동기화에 실패했어요. 다시 시도해주세요.',
+                                            'Failed to sync icon metadata. Please try again.',
+                                          ),
+                                        ),
                                       ),
-                                      if (deleteMode && canDelete)
-                                        Positioned(
-                                          top: 2,
-                                          right: 2,
-                                          child: Material(
-                                            color: Colors.transparent,
+                                    );
+                                  } else if (savedMood != null && mounted) {
+                                    setState(() {
+                                      final index = _customMoodOptions
+                                          .indexWhere(
+                                            (mood) => mood.key == photoMood.key,
+                                          );
+                                      if (index >= 0) {
+                                        _customMoodOptions[index] =
+                                            _hydrateCustomMoodOption(savedMood);
+                                      }
+                                      _sortCustomMoodsNewestFirst(
+                                        _customMoodOptions,
+                                      );
+                                      _cacheCustomMoodOptions(
+                                        _customMoodOptions,
+                                      );
+                                    });
+                                    safeSetSheetState(() {
+                                      final index = sheetCustomMoodOptions
+                                          .indexWhere(
+                                            (mood) => mood.key == photoMood.key,
+                                          );
+                                      if (index >= 0) {
+                                        sheetCustomMoodOptions[index] =
+                                            _hydrateCustomMoodOption(savedMood);
+                                      }
+                                      _sortCustomMoodsNewestFirst(
+                                        sheetCustomMoodOptions,
+                                      );
+                                    });
+                                  }
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1E1E1E),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.add_rounded, size: 16),
+                                label: Text(
+                                  tr('아이콘 추가', 'Add Icon'),
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              _buildMoodTab(
+                                label: tr('기본', 'Default'),
+                                selected: selectedTabIndex == 0,
+                                onTap: () {
+                                  safeSetSheetState(() {
+                                    selectedTabIndex = 0;
+                                    deleteMode = false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 14),
+                              _buildMoodTab(
+                                label: tr('나의 것', 'Mine'),
+                                selected: selectedTabIndex == 1,
+                                onTap: () {
+                                  safeSetSheetState(() {
+                                    selectedTabIndex = 1;
+                                    mineVisibleCount = sheetCustomMoodOptions
+                                        .length
+                                        .clamp(0, _customMoodPageSize)
+                                        .toInt();
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Expanded(
+                            child: Builder(
+                              builder: (_) {
+                                final visibleMoods = selectedTabIndex == 0
+                                    ? sheetBuiltInMoodOptions
+                                    : sheetCustomMoodOptions
+                                          .take(mineVisibleCount)
+                                          .toList();
+                                final hasMoreCustomMoods =
+                                    selectedTabIndex == 1 &&
+                                    mineVisibleCount <
+                                        sheetCustomMoodOptions.length;
+                                if (selectedTabIndex == 1 &&
+                                    isLoadingCustomMoods) {
+                                  return const Center(
+                                    child: CircularProgressIndicator(),
+                                  );
+                                }
+                                if (visibleMoods.isEmpty) {
+                                  return Center(
+                                    child: Text(
+                                      tr(
+                                        '추가한 아이콘이 없어요.\n오른쪽 위에서 아이콘을 추가해보세요.',
+                                        'No custom icons yet.\nAdd one from the top-right button.',
+                                      ),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        color: Color(0xFF6B7280),
+                                        height: 1.45,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return NotificationListener<ScrollNotification>(
+                                  onNotification: (notification) {
+                                    if (selectedTabIndex != 1 ||
+                                        !hasMoreCustomMoods ||
+                                        notification.metrics.axis !=
+                                            Axis.vertical) {
+                                      return false;
+                                    }
+                                    if (notification.metrics.extentAfter >
+                                        240) {
+                                      return false;
+                                    }
+                                    safeSetSheetState(() {
+                                      mineVisibleCount =
+                                          (mineVisibleCount +
+                                                  _customMoodPageSize)
+                                              .clamp(
+                                                0,
+                                                sheetCustomMoodOptions.length,
+                                              )
+                                              .toInt();
+                                    });
+                                    return false;
+                                  },
+                                  child: GridView.builder(
+                                    itemCount:
+                                        visibleMoods.length +
+                                        (hasMoreCustomMoods ? 1 : 0),
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: 3,
+                                          mainAxisSpacing: 14,
+                                          crossAxisSpacing: 8,
+                                          childAspectRatio: 1.05,
+                                        ),
+                                    itemBuilder: (context, index) {
+                                      if (index >= visibleMoods.length) {
+                                        return Center(
+                                          child: Text(
+                                            tr('불러오는 중...', 'Loading...'),
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF9CA3AF),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      final mood = visibleMoods[index];
+                                      final canDelete =
+                                          selectedTabIndex == 1 &&
+                                          _canDeleteCustomMood(mood.key);
+                                      return Stack(
+                                        children: [
+                                          Positioned.fill(
                                             child: InkWell(
                                               borderRadius:
-                                                  BorderRadius.circular(99),
-                                              onTap: () async {
-                                                await _confirmDeleteCustomMood(
+                                                  BorderRadius.circular(14),
+                                              onTap: deleteMode
+                                                  ? null
+                                                  : () => Navigator.of(
+                                                      sheetContext,
+                                                    ).pop(mood),
+                                              child: Center(
+                                                child: _buildMoodAsset(
                                                   mood,
-                                                  onDeleted: () {
-                                                    safeSetSheetState(() {
-                                                      sheetCustomMoodOptions
-                                                          .removeWhere(
-                                                            (item) =>
-                                                                item.key ==
-                                                                mood.key,
-                                                          );
-                                                      mineVisibleCount =
-                                                          mineVisibleCount
-                                                              .clamp(
-                                                                0,
-                                                                sheetCustomMoodOptions
-                                                                    .length,
-                                                              )
-                                                              .toInt();
-                                                    });
-                                                  },
-                                                );
-                                              },
-                                              child: Container(
-                                                width: 20,
-                                                height: 20,
-                                                decoration: const BoxDecoration(
-                                                  color: Color(0xFF111827),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(
-                                                  Icons.close_rounded,
-                                                  size: 13,
-                                                  color: Colors.white,
+                                                  size: 56,
                                                 ),
                                               ),
                                             ),
                                           ),
-                                        ),
-                                    ],
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
+                                          if (deleteMode && canDelete)
+                                            Positioned(
+                                              top: 2,
+                                              right: 2,
+                                              child: Material(
+                                                color: Colors.transparent,
+                                                child: InkWell(
+                                                  borderRadius:
+                                                      BorderRadius.circular(99),
+                                                  onTap: () async {
+                                                    await _confirmDeleteCustomMood(
+                                                      mood,
+                                                      onDeleted: () {
+                                                        safeSetSheetState(() {
+                                                          sheetCustomMoodOptions
+                                                              .removeWhere(
+                                                                (item) =>
+                                                                    item.key ==
+                                                                    mood.key,
+                                                              );
+                                                          mineVisibleCount =
+                                                              mineVisibleCount
+                                                                  .clamp(
+                                                                    0,
+                                                                    sheetCustomMoodOptions
+                                                                        .length,
+                                                                  )
+                                                                  .toInt();
+                                                        });
+                                                      },
+                                                    );
+                                                  },
+                                                  child: Container(
+                                                    width: 20,
+                                                    height: 20,
+                                                    decoration:
+                                                        const BoxDecoration(
+                                                          color: Color(
+                                                            0xFF111827,
+                                                          ),
+                                                          shape:
+                                                              BoxShape.circle,
+                                                        ),
+                                                    child: const Icon(
+                                                      Icons.close_rounded,
+                                                      size: 13,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             );
           },
-        );
-      },
-    ).whenComplete(() {
-      isSheetClosed = true;
-    });
+        ).whenComplete(() {
+          isSheetClosed = true;
+        });
 
     if (!mounted || pickedMood == null) return;
 
@@ -3263,7 +3424,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     final moodKey = (data['moodKey'] ?? '').toString();
     final mood = _moodByKey[moodKey];
     if (mood != null) {
-      return mood;
+      return _hydrateCustomMoodOption(mood);
     }
     final storageUrl = (data['moodCustomStorageUrl'] ?? '').toString();
     final storagePath = (data['moodCustomStoragePath'] ?? '').toString();
@@ -3271,12 +3432,14 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     if (storageUrl.isEmpty && storagePath.isEmpty && customBase64.isEmpty) {
       return null;
     }
-    return MoodOption.custom(
-      key: moodKey.isEmpty ? 'custom_saved' : moodKey,
-      label: '커스텀',
-      customIconBase64: customBase64,
-      storageUrl: storageUrl,
-      storagePath: storagePath,
+    return _hydrateCustomMoodOption(
+      MoodOption.custom(
+        key: moodKey.isEmpty ? 'custom_saved' : moodKey,
+        label: '커스텀',
+        customIconBase64: customBase64,
+        storageUrl: storageUrl,
+        storagePath: storagePath,
+      ),
     );
   }
 
@@ -3882,6 +4045,27 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     return options;
   }
 
+  int _editorCustomMoodSortValue(MoodOption mood) {
+    final match = RegExp(r'_(\d+)$').firstMatch(mood.key);
+    return int.tryParse(match?.group(1) ?? '') ?? 0;
+  }
+
+  List<MoodOption> get _editorCustomMoodOptions {
+    final options = _editorMoodOptions
+        .where((mood) => !kMoodOptions.any((preset) => preset.key == mood.key))
+        .toList();
+    options.sort((a, b) {
+      final byTimestamp = _editorCustomMoodSortValue(
+        b,
+      ).compareTo(_editorCustomMoodSortValue(a));
+      if (byTimestamp != 0) {
+        return byTimestamp;
+      }
+      return b.key.compareTo(a.key);
+    });
+    return options;
+  }
+
   Future<String?> _resolveCustomMoodBase64(MoodOption mood) async {
     if ((mood.customIconBase64 ?? '').isNotEmpty) {
       return mood.customIconBase64;
@@ -3907,65 +4091,178 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
   }
 
   Future<void> _pickEditorMood() async {
+    var selectedTabIndex = 0; // 0: 기본, 1: 나의 것
     final picked = await showModalBottomSheet<MoodOption>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetContext) => FractionallySizedBox(
-        heightFactor: 0.42,
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFFFCFCFD),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                Container(
-                  width: 38,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD4D7DD),
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    tr('감정 선택', 'Select Mood'),
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: GridView.builder(
-                    itemCount: _editorMoodOptions.length,
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          mainAxisSpacing: 14,
-                          crossAxisSpacing: 8,
-                          childAspectRatio: 1.05,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final sheetBuiltInMoodOptions = <MoodOption>[...kMoodOptions];
+          final sheetCustomMoodOptions = _editorCustomMoodOptions;
+          final visibleMoods = selectedTabIndex == 0
+              ? sheetBuiltInMoodOptions
+              : sheetCustomMoodOptions;
+          return FractionallySizedBox(
+            heightFactor: 0.58,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFFCFCFD),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4D7DD),
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        tr('아이콘 선택', 'Select Icon'),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
                         ),
-                    itemBuilder: (_, index) {
-                      final mood = _editorMoodOptions[index];
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () => Navigator.of(sheetContext).pop(mood),
-                        child: Center(
-                          child: _buildEditorMoodAsset(mood, size: 56),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        InkWell(
+                          onTap: () =>
+                              setSheetState(() => selectedTabIndex = 0),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 2,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  tr('기본', 'Default'),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: selectedTabIndex == 0
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: selectedTabIndex == 0
+                                        ? const Color(0xFF111827)
+                                        : const Color(0xFF9CA3AF),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  width: 46,
+                                  height: 2.5,
+                                  decoration: BoxDecoration(
+                                    color: selectedTabIndex == 0
+                                        ? const Color(0xFF111827)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                      );
-                    },
-                  ),
+                        const SizedBox(width: 14),
+                        InkWell(
+                          onTap: () =>
+                              setSheetState(() => selectedTabIndex = 1),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 2,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  tr('나의 것', 'Mine'),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: selectedTabIndex == 1
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: selectedTabIndex == 1
+                                        ? const Color(0xFF111827)
+                                        : const Color(0xFF9CA3AF),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  width: 46,
+                                  height: 2.5,
+                                  decoration: BoxDecoration(
+                                    color: selectedTabIndex == 1
+                                        ? const Color(0xFF111827)
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: visibleMoods.isEmpty
+                          ? Center(
+                              child: Text(
+                                tr('추가한 아이콘이 없어요.', 'No custom icons yet.'),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Color(0xFF6B7280),
+                                  height: 1.45,
+                                ),
+                              ),
+                            )
+                          : GridView.builder(
+                              itemCount: visibleMoods.length,
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 3,
+                                    mainAxisSpacing: 14,
+                                    crossAxisSpacing: 8,
+                                    childAspectRatio: 1.05,
+                                  ),
+                              itemBuilder: (_, index) {
+                                final mood = visibleMoods[index];
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(14),
+                                  onTap: () =>
+                                      Navigator.of(sheetContext).pop(mood),
+                                  child: Center(
+                                    child: _buildEditorMoodAsset(
+                                      mood,
+                                      size: 56,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
 
@@ -4756,10 +5053,12 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     const textMain = Color(0xFF1F2937);
     const textSub = Color(0xFF8A94A6);
     const accent = Color(0xFF111827);
-    MoodOption? selectedMood = _editorMoodOptions.cast<MoodOption?>().firstWhere(
-      (mood) => mood?.key == _selectedMoodKey,
-      orElse: () => null,
-    );
+    MoodOption? selectedMood = _editorMoodOptions
+        .cast<MoodOption?>()
+        .firstWhere(
+          (mood) => mood?.key == _selectedMoodKey,
+          orElse: () => null,
+        );
     final hasStoredRemote =
         (_selectedMoodStorageUrl ?? '').isNotEmpty ||
         (_selectedMoodStoragePath ?? '').isNotEmpty;
@@ -6538,6 +6837,16 @@ class MoodOption {
 }
 
 final Map<String, Uint8List> _globalAssetCache = {};
+final Map<String, List<MoodOption>> _globalCustomMoodOptionsCache = {};
+final Map<String, Map<String, Uint8List>> _globalCustomMoodBytesCache = {};
+final Set<String> _globalLoadedCustomMoodUsers = <String>{};
+
+Map<String, Uint8List> _sharedCustomMoodBytesCache(String userEmail) {
+  return _globalCustomMoodBytesCache.putIfAbsent(
+    userEmail,
+    () => <String, Uint8List>{},
+  );
+}
 
 Future<void> _ensureAssetsCached() async {
   for (final mood in kMoodOptions) {

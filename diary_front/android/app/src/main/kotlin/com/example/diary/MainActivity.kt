@@ -11,11 +11,14 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "diary/home_widget"
         ).setMethodCallHandler { call, result ->
-            if (call.method == "updateDiaryWidget") {
-                DiaryMoodWidgetProvider.updateAllWidgets(this)
-                result.success(null)
-            } else {
-                result.notImplemented()
+            when (call.method) {
+                "updateDiaryWidget", "syncWidgetLanguage" -> {
+                    DiaryMoodWidgetProvider.updateAllWidgets(this)
+                    result.success(null)
+                }
+                else -> {
+                    result.notImplemented()
+                }
             }
         }
     }

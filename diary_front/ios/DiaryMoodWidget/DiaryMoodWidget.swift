@@ -2,6 +2,27 @@ import WidgetKit
 import SwiftUI
 import UIKit
 
+private let widgetBackgroundColor = Color.white
+private let widgetPrimaryTextColor = Color.black
+private let widgetSecondaryTextColor = Color(red: 0.18, green: 0.18, blue: 0.18)
+
+private extension View {
+    @ViewBuilder
+    func diaryWidgetBackground() -> some View {
+        if #available(iOSApplicationExtension 17.0, *) {
+            containerBackground(for: .widget) {
+                widgetBackgroundColor
+            }
+        } else {
+            background(widgetBackgroundColor)
+        }
+    }
+}
+
+private func widgetLocalized(_ key: String) -> String {
+    NSLocalizedString(key, comment: "")
+}
+
 private enum WidgetConstants {
     static let appGroupId = "group.com.imyhnam.diary"
     static let keyToday = "widget_today_emoji"
@@ -11,10 +32,35 @@ private enum WidgetConstants {
     static let keyMonth = "widget_month_key"
     static let keyMonthMap = "widget_month_map"
     static let keyMonthMapImages = "widget_month_map_images"
+    static let keyLanguage = "widget_language"
+}
+
+enum WidgetLanguage: String {
+    case ko
+    case en
+
+    init(code: String) {
+        self = code == "en" ? .en : .ko
+    }
+
+    var todayTitle: String { self == .en ? "TODAY" : "오늘" }
+    var monthTitle: String { self == .en ? "MONTH" : "이번 달" }
+    var recentTitle: String { self == .en ? "RECENT" : "최근" }
+    var emptyText: String { self == .en ? "None" : "없음" }
+    var weekdays: [String] {
+        self == .en
+            ? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+            : ["일", "월", "화", "수", "목", "금", "토"]
+    }
+
+    func monthText(_ month: Int) -> String {
+        self == .en ? "\(month)" : "\(month)월"
+    }
 }
 
 struct DiaryMoodEntry: TimelineEntry {
     let date: Date
+    let language: WidgetLanguage
     let todayEmoji: String
     let todayImageData: Data?
     let recentEmojis: [String]
@@ -28,6 +74,7 @@ struct DiaryMoodProvider: TimelineProvider {
     func placeholder(in context: Context) -> DiaryMoodEntry {
         DiaryMoodEntry(
             date: Date(),
+            language: .ko,
             todayEmoji: "🙂",
             todayImageData: nil,
             recentEmojis: ["🙂", "😊", "🥰", "😴", "😰", "😢"],
@@ -50,6 +97,7 @@ struct DiaryMoodProvider: TimelineProvider {
 
     private func loadEntry() -> DiaryMoodEntry {
         let defaults = UserDefaults(suiteName: WidgetConstants.appGroupId)
+        let language = WidgetLanguage(code: defaults?.string(forKey: WidgetConstants.keyLanguage) ?? "ko")
         let today = defaults?.string(forKey: WidgetConstants.keyToday) ?? ""
         let todayImage = Data(base64Encoded: defaults?.string(forKey: WidgetConstants.keyTodayImage) ?? "")
         let recent = (defaults?.stringArray(forKey: WidgetConstants.keyRecent) ?? []).prefix(6)
@@ -86,6 +134,7 @@ struct DiaryMoodProvider: TimelineProvider {
         let resolvedTodayImage = hasTodayRecord ? (todayImage ?? dayImageData) : nil
         return DiaryMoodEntry(
             date: Date(),
+            language: language,
             todayEmoji: resolvedTodayEmoji,
             todayImageData: resolvedTodayImage,
             recentEmojis: Array(recent),
@@ -108,6 +157,7 @@ struct MoodIconView: View {
     let imageData: Data?
     let emoji: String
     let size: CGFloat
+    let emptyText: String
 
     var body: some View {
         if let imageData, let uiImage = UIImage(data: imageData) {
@@ -116,8 +166,9 @@ struct MoodIconView: View {
                 .scaledToFit()
                 .frame(width: size, height: size)
         } else {
-            Text(emoji.isEmpty ? "없음" : emoji)
+            Text(emoji.isEmpty ? emptyText : emoji)
                 .font(.system(size: size * 0.75))
+                .foregroundStyle(widgetPrimaryTextColor)
                 .frame(width: size, height: size)
         }
     }
@@ -128,25 +179,27 @@ struct DiaryTodayWidgetEntryView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.95, green: 0.94, blue: 0.92)
+            widgetBackgroundColor
             VStack(alignment: .leading, spacing: 12) {
-                Text("TODAY")
+                Text(entry.language.todayTitle)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color.gray)
+                    .foregroundStyle(widgetPrimaryTextColor)
                 if entry.todayImageData == nil && entry.todayEmoji.isEmpty {
-                    Text("없음")
+                    Text(entry.language.emptyText)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.gray.opacity(0.9))
+                        .foregroundStyle(widgetSecondaryTextColor)
                 } else {
                     MoodIconView(
                         imageData: entry.todayImageData,
                         emoji: entry.todayEmoji,
-                        size: 64
+                        size: 64,
+                        emptyText: entry.language.emptyText
                     )
                 }
             }
             .padding(14)
         }
+        .diaryWidgetBackground()
     }
 }
 
@@ -155,52 +208,63 @@ struct DiaryMonthSummaryWidgetEntryView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.95, green: 0.94, blue: 0.92)
+            widgetBackgroundColor
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Text("MONTH")
+                    Text(entry.language.monthTitle)
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.gray)
+                        .foregroundStyle(widgetPrimaryTextColor)
                     Spacer()
                     Text(monthTitle(from: entry.monthKey))
                         .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(widgetPrimaryTextColor)
                 }
                 HStack(spacing: 8) {
                     ForEach(0..<3, id: \.self) { index in
                         let emoji = index < entry.recentEmojis.count ? entry.recentEmojis[index] : ""
                         let imageData = index < entry.recentImageData.count ? entry.recentImageData[index] : nil
-                        MoodIconView(imageData: imageData, emoji: emoji, size: 32)
+                        MoodIconView(
+                            imageData: imageData,
+                            emoji: emoji,
+                            size: 32,
+                            emptyText: ""
+                        )
                             .frame(maxWidth: .infinity)
                     }
                 }
-                Text("RECENT")
+                Text(entry.language.recentTitle)
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(Color.gray)
+                    .foregroundStyle(widgetPrimaryTextColor)
                 HStack(spacing: 4) {
                     ForEach(0..<6, id: \.self) { index in
                         let emoji = index < entry.recentEmojis.count ? entry.recentEmojis[index] : ""
                         let imageData = index < entry.recentImageData.count ? entry.recentImageData[index] : nil
-                        MoodIconView(imageData: imageData, emoji: emoji, size: 24)
+                        MoodIconView(
+                            imageData: imageData,
+                            emoji: emoji,
+                            size: 24,
+                            emptyText: ""
+                        )
                             .frame(maxWidth: .infinity)
                     }
                 }
             }
             .padding(14)
         }
+        .diaryWidgetBackground()
     }
 
     private func monthTitle(from key: String) -> String {
         let chunks = key.split(separator: "-")
         if chunks.count == 2 {
-            return "\(chunks[1])월"
+            return entry.language.monthText(Int(chunks[1]) ?? Calendar.current.component(.month, from: Date()))
         }
-        return "\(Calendar.current.component(.month, from: Date()))월"
+        return entry.language.monthText(Calendar.current.component(.month, from: Date()))
     }
 }
 
 struct DiaryCalendarWidgetEntryView: View {
     var entry: DiaryMoodProvider.Entry
-    private let weekdays = ["일", "월", "화", "수", "목", "금", "토"]
 
     var body: some View {
         let calendar = Calendar.current
@@ -210,18 +274,19 @@ struct DiaryCalendarWidgetEntryView: View {
         let monthDates = calendarGridDates(for: year, month: month)
 
         return ZStack {
-            Color(red: 0.95, green: 0.94, blue: 0.92)
+            widgetBackgroundColor
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("\(month)월")
+                    Text(entry.language.monthText(month))
                         .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(widgetPrimaryTextColor)
                     Spacer()
                 }
                 HStack(spacing: 0) {
-                    ForEach(weekdays, id: \.self) { day in
+                    ForEach(entry.language.weekdays, id: \.self) { day in
                         Text(day)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Color.gray)
+                            .foregroundStyle(widgetPrimaryTextColor)
                             .frame(maxWidth: .infinity)
                     }
                 }
@@ -237,14 +302,15 @@ struct DiaryCalendarWidgetEntryView: View {
                                             MoodIconView(
                                                 imageData: imageData,
                                                 emoji: entry.monthEmojiByDay[day] ?? "🙂",
-                                                size: 18
+                                                size: 18,
+                                                emptyText: ""
                                             )
                                         } else if let emoji = entry.monthEmojiByDay[day] {
-                                            MoodIconView(imageData: nil, emoji: emoji, size: 18)
+                                            MoodIconView(imageData: nil, emoji: emoji, size: 18, emptyText: "")
                                         } else {
                                             Text("\(day)")
                                                 .font(.system(size: 11, weight: .regular))
-                                                .foregroundStyle(Color.gray.opacity(0.9))
+                                                .foregroundStyle(widgetSecondaryTextColor)
                                         }
                                     } else {
                                         Text(" ").font(.system(size: 11))
@@ -258,6 +324,7 @@ struct DiaryCalendarWidgetEntryView: View {
             }
             .padding(12)
         }
+        .diaryWidgetBackground()
     }
 
     private func dateFromMonthKey(_ key: String) -> Date? {
@@ -295,8 +362,8 @@ struct DiaryTodayWidget: Widget {
         StaticConfiguration(kind: kind, provider: DiaryMoodProvider()) { entry in
             DiaryTodayWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Diary Today")
-        .description("오늘 감정 이모티콘을 보여줍니다.")
+        .configurationDisplayName(widgetLocalized("WIDGET_TODAY_NAME"))
+        .description(widgetLocalized("WIDGET_TODAY_DESCRIPTION"))
         .supportedFamilies([.systemSmall])
     }
 }
@@ -308,8 +375,8 @@ struct DiaryMonthSummaryWidget: Widget {
         StaticConfiguration(kind: kind, provider: DiaryMoodProvider()) { entry in
             DiaryMonthSummaryWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Diary Month")
-        .description("이번 달 감정 요약을 보여줍니다.")
+        .configurationDisplayName(widgetLocalized("WIDGET_MONTH_NAME"))
+        .description(widgetLocalized("WIDGET_MONTH_DESCRIPTION"))
         .supportedFamilies([.systemMedium])
     }
 }
@@ -321,8 +388,8 @@ struct DiaryCalendarWidget: Widget {
         StaticConfiguration(kind: kind, provider: DiaryMoodProvider()) { entry in
             DiaryCalendarWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Diary Calendar")
-        .description("달력에 기록된 감정 이모티콘을 보여줍니다.")
+        .configurationDisplayName(widgetLocalized("WIDGET_CALENDAR_NAME"))
+        .description(widgetLocalized("WIDGET_CALENDAR_DESCRIPTION"))
         .supportedFamilies([.systemLarge])
     }
 }
