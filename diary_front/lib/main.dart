@@ -634,12 +634,14 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   static const MethodChannel _widgetChannel = MethodChannel(
     'diary/home_widget',
   );
+  static const int _customMoodPageSize = 24;
 
   late DateTime _focusedDay;
   late DateTime _selectedDay;
   late DateTime _listMonthAnchor;
   bool _isListMode = false;
   final List<MoodOption> _customMoodOptions = [];
+  final Map<String, Uint8List> _customMoodBytesCache = {};
   String? _lastWidgetPayload;
 
   Map<String, MoodOption> get _moodByKey {
@@ -676,8 +678,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         final key = (moodData['key'] ?? '').toString();
         final storageUrl = (moodData['storageUrl'] ?? '').toString();
         final storagePath = (moodData['storagePath'] ?? '').toString();
-        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty))
+        final thumbnailUrl = (moodData['thumbnailUrl'] ?? '').toString();
+        final thumbnailPath = (moodData['thumbnailPath'] ?? '').toString();
+        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty)) {
           continue;
+        }
         if (seenKeys.contains(key) || seenUrls.contains(storageUrl)) continue;
         seenKeys.add(key);
         if (storageUrl.isNotEmpty) seenUrls.add(storageUrl);
@@ -685,6 +690,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           'key': key,
           'storageUrl': storageUrl,
           'storagePath': storagePath,
+          'thumbnailUrl': thumbnailUrl,
+          'thumbnailPath': thumbnailPath,
         });
       }
       var usedStorageFallback = false;
@@ -695,42 +702,39 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
 
       final loadedOptions = <MoodOption>[];
       final cleanedRows = <Map<String, dynamic>>[];
-      final seenImageSignatures = <String>{};
 
       for (final moodData in uniqueMoodRows) {
         final key = (moodData['key'] ?? '').toString();
         final storageUrl = (moodData['storageUrl'] ?? '').toString();
         final storagePath = (moodData['storagePath'] ?? '').toString();
-        try {
-          final ref = storageUrl.isNotEmpty
-              ? FirebaseStorage.instance.refFromURL(storageUrl)
-              : FirebaseStorage.instance.ref().child(storagePath);
-          final bytes = await ref.getData();
-          if (bytes == null || !mounted) continue;
-          final signature = base64Encode(bytes);
-          if (seenImageSignatures.contains(signature)) {
-            continue;
-          }
-          seenImageSignatures.add(signature);
-          cleanedRows.add({
-            'key': key,
-            'storageUrl': storageUrl,
-            'storagePath': ref.fullPath,
-          });
-          loadedOptions.add(
-            MoodOption.custom(
-              key: key,
-              label: tr('커스텀', 'Custom'),
-              customIconBytes: bytes,
-            ),
-          );
-        } catch (_) {}
+        final thumbnailUrl = (moodData['thumbnailUrl'] ?? '').toString();
+        final thumbnailPath = (moodData['thumbnailPath'] ?? '').toString();
+        if (key.isEmpty || (storageUrl.isEmpty && storagePath.isEmpty)) {
+          continue;
+        }
+        cleanedRows.add({
+          'key': key,
+          'storageUrl': storageUrl,
+          'storagePath': storagePath,
+          'thumbnailUrl': thumbnailUrl,
+          'thumbnailPath': thumbnailPath,
+        });
+        loadedOptions.add(
+          MoodOption.custom(
+            key: key,
+            label: tr('커스텀', 'Custom'),
+            storageUrl: storageUrl,
+            storagePath: storagePath,
+            thumbnailUrl: thumbnailUrl,
+            thumbnailPath: thumbnailPath,
+          ),
+        );
       }
 
-      if (cleanedRows.isNotEmpty &&
-          (usedStorageFallback ||
+      if ((usedStorageFallback ||
               cleanedRows.length != moods.length ||
-              !doc.exists)) {
+              !doc.exists) &&
+          cleanedRows.isNotEmpty) {
         await _userCollection.doc('_custom_moods').set({'moods': cleanedRows});
       }
       if (!mounted) return;
@@ -740,6 +744,43 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           ..addAll(loadedOptions);
       });
     } catch (_) {}
+  }
+
+  Future<Uint8List?> _loadCustomMoodBytes(MoodOption mood) async {
+    if (mood.customIconBytes != null && mood.customIconBytes!.isNotEmpty) {
+      return mood.customIconBytes!;
+    }
+    final cachedBytes = _customMoodBytesCache[mood.key];
+    if (cachedBytes != null && cachedBytes.isNotEmpty) {
+      return cachedBytes;
+    }
+    if ((mood.customIconBase64 ?? '').isNotEmpty) {
+      try {
+        final decoded = base64Decode(mood.customIconBase64!);
+        _customMoodBytesCache[mood.key] = decoded;
+        return decoded;
+      } catch (_) {}
+    }
+    try {
+      final ref = (mood.storageUrl ?? '').isNotEmpty
+          ? FirebaseStorage.instance.refFromURL(mood.storageUrl!)
+          : FirebaseStorage.instance.ref().child(mood.storagePath!);
+      final bytes = await ref.getData();
+      if (bytes == null || bytes.isEmpty) return null;
+      _customMoodBytesCache[mood.key] = bytes;
+      return bytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> _resolveCustomMoodBase64(MoodOption mood) async {
+    if ((mood.customIconBase64 ?? '').isNotEmpty) {
+      return mood.customIconBase64;
+    }
+    final bytes = await _loadCustomMoodBytes(mood);
+    if (bytes == null || bytes.isEmpty) return null;
+    return base64Encode(bytes);
   }
 
   bool _isBuiltInMood(String key) {
@@ -758,11 +799,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
 
   Future<String> _widgetImageBase64FromMood(MoodOption? mood) async {
     if (mood == null) return '';
-    if (mood.customIconBase64 != null && mood.customIconBase64!.isNotEmpty) {
-      return mood.customIconBase64!;
-    }
-    if (mood.customIconBytes != null && mood.customIconBytes!.isNotEmpty) {
-      return base64Encode(mood.customIconBytes!);
+    final customBase64 = await _resolveCustomMoodBase64(mood);
+    if ((customBase64 ?? '').isNotEmpty) {
+      return customBase64!;
     }
     if (mood.assetPath.isEmpty) return '';
     try {
@@ -909,15 +948,25 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       final remaining = <Map<String, dynamic>>[];
       final urlsToDelete = <String>{};
       final pathsToDelete = <String>{};
+      final thumbnailUrlsToDelete = <String>{};
+      final thumbnailPathsToDelete = <String>{};
       for (final raw in moods) {
         if (raw is! Map) continue;
         final row = raw.map((k, v) => MapEntry(k.toString(), v));
         final rowKey = (row['key'] ?? '').toString();
         final rowUrl = (row['storageUrl'] ?? '').toString();
         final rowPath = (row['storagePath'] ?? '').toString();
+        final rowThumbnailUrl = (row['thumbnailUrl'] ?? '').toString();
+        final rowThumbnailPath = (row['thumbnailPath'] ?? '').toString();
         if (rowKey == key) {
           if (rowUrl.isNotEmpty) urlsToDelete.add(rowUrl);
           if (rowPath.isNotEmpty) pathsToDelete.add(rowPath);
+          if (rowThumbnailUrl.isNotEmpty) {
+            thumbnailUrlsToDelete.add(rowThumbnailUrl);
+          }
+          if (rowThumbnailPath.isNotEmpty) {
+            thumbnailPathsToDelete.add(rowThumbnailPath);
+          }
           continue;
         }
         if (rowKey.isNotEmpty && (rowUrl.isNotEmpty || rowPath.isNotEmpty)) {
@@ -925,6 +974,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
             'key': rowKey,
             'storageUrl': rowUrl,
             'storagePath': rowPath,
+            'thumbnailUrl': rowThumbnailUrl,
+            'thumbnailPath': rowThumbnailPath,
           });
         }
       }
@@ -939,8 +990,24 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           await FirebaseStorage.instance.ref().child(path).delete();
         } catch (_) {}
       }
+      for (final url in thumbnailUrlsToDelete) {
+        try {
+          await FirebaseStorage.instance.refFromURL(url).delete();
+        } catch (_) {}
+      }
+      for (final path in thumbnailPathsToDelete) {
+        try {
+          await FirebaseStorage.instance.ref().child(path).delete();
+        } catch (_) {}
+      }
       // Fallback: older/dirty rows without URL/path metadata.
       if (urlsToDelete.isEmpty && pathsToDelete.isEmpty) {
+        try {
+          await FirebaseStorage.instance
+              .ref()
+              .child('${widget.userEmail}/mood_icons/$key.jpg')
+              .delete();
+        } catch (_) {}
         try {
           await FirebaseStorage.instance
               .ref()
@@ -948,9 +1015,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               .delete();
         } catch (_) {}
       }
+      if (thumbnailUrlsToDelete.isEmpty && thumbnailPathsToDelete.isEmpty) {
+        try {
+          await FirebaseStorage.instance
+              .ref()
+              .child('${widget.userEmail}/mood_icons_thumbs/$key.png')
+              .delete();
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() {
         _customMoodOptions.removeWhere((mood) => mood.key == key);
+        _customMoodBytesCache.remove(key);
       });
     } catch (_) {}
   }
@@ -1047,14 +1123,19 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     onDeleted?.call();
   }
 
-  Future<bool> _saveCustomMoodToStorage(String key, Uint8List bytes) async {
+  Future<MoodOption?> _saveCustomMoodToStorage(
+    String key,
+    Uint8List bytes, {
+    required String label,
+  }) async {
     try {
+      final jpgBytes = _toCustomMoodJpegBytes(bytes);
       final ref = FirebaseStorage.instance
           .ref()
           .child(widget.userEmail)
           .child('mood_icons')
-          .child('$key.png');
-      await ref.putData(bytes, SettableMetadata(contentType: 'image/png'));
+          .child('$key.jpg');
+      await ref.putData(jpgBytes, SettableMetadata(contentType: 'image/jpeg'));
       final url = await ref.getDownloadURL();
       final storagePath = ref.fullPath;
       final docRef = _userCollection.doc('_custom_moods');
@@ -1088,9 +1169,15 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       }
 
       await docRef.set({'moods': dedupedReversed.reversed.toList()});
-      return true;
+      return MoodOption.custom(
+        key: key,
+        label: label,
+        customIconBytes: jpgBytes,
+        storageUrl: url,
+        storagePath: storagePath,
+      );
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
@@ -1111,6 +1198,14 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
               (data['moodCustomIcon'] ?? '').toString().isEmpty
               ? null
               : data['moodCustomIcon'].toString(),
+          initialMoodStorageUrl:
+              (data['moodCustomStorageUrl'] ?? '').toString().isEmpty
+              ? null
+              : data['moodCustomStorageUrl'].toString(),
+          initialMoodStoragePath:
+              (data['moodCustomStoragePath'] ?? '').toString().isEmpty
+              ? null
+              : data['moodCustomStoragePath'].toString(),
           docId: docId,
           initialTitle: (data['title'] ?? '').toString(),
           initialContentBlocks: _contentBlocksFromData(data),
@@ -1421,6 +1516,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   Future<void> _openWritePageWithMood(
     String initialMoodKey, {
     String? initialMoodCustomBase64,
+    String? initialMoodStorageUrl,
+    String? initialMoodStoragePath,
   }) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
@@ -1430,6 +1527,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           initialDate: _selectedDay,
           initialMoodKey: initialMoodKey,
           initialMoodCustomBase64: initialMoodCustomBase64,
+          initialMoodStorageUrl: initialMoodStorageUrl,
+          initialMoodStoragePath: initialMoodStoragePath,
           initialCustomMoodOptions: List<MoodOption>.from(_customMoodOptions),
         ),
       ),
@@ -1576,10 +1675,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         }
         return null;
       }
+      final jpgBytes = _toCustomMoodJpegBytes(clipped);
       return MoodOption.custom(
         key: 'photo_${DateTime.now().millisecondsSinceEpoch}',
         label: tr('사진 아이콘', 'Photo Icon'),
-        customIconBytes: clipped,
+        customIconBytes: jpgBytes,
       );
     } catch (_) {
       if (mounted) {
@@ -1772,6 +1872,9 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     var isSheetClosed = false;
     var deleteMode = false;
     var selectedTabIndex = 0; // 0: 기본, 1: 나의 것
+    var mineVisibleCount = _customMoodOptions.length
+        .clamp(0, _customMoodPageSize)
+        .toInt();
     final sheetBuiltInMoodOptions = <MoodOption>[...kMoodOptions];
     final sheetCustomMoodOptions = <MoodOption>[..._customMoodOptions];
     final pickedMood = await showModalBottomSheet<MoodOption>(
@@ -1781,15 +1884,23 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (builderContext, setSheetState) {
+            void safeSetSheetState(VoidCallback fn) {
+              if (!mounted || isSheetClosed) return;
+              setSheetState(fn);
+            }
+
             if (isLoadingCustomMoods && !didStartCustomMoodRefresh) {
               didStartCustomMoodRefresh = true;
               _loadCustomMoods().then((_) {
                 if (!mounted || isSheetClosed) return;
-                setSheetState(() {
+                safeSetSheetState(() {
                   isLoadingCustomMoods = false;
                   sheetCustomMoodOptions
                     ..clear()
                     ..addAll(_customMoodOptions);
+                  mineVisibleCount = sheetCustomMoodOptions.length
+                      .clamp(0, _customMoodPageSize)
+                      .toInt();
                 });
               });
             }
@@ -1829,7 +1940,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                           if (selectedTabIndex == 1)
                             OutlinedButton.icon(
                               onPressed: () {
-                                setSheetState(() {
+                                safeSetSheetState(() {
                                   deleteMode = !deleteMode;
                                 });
                               },
@@ -1865,11 +1976,16 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                               final mode = await _showIconAddModeSheet();
                               if (mode == null || !mounted) return;
                               if (mode == _IconAddMode.draw) {
-                                final customBytes = await showDialog<Uint8List>(
-                                  context: context,
-                                  builder: (_) => const _CustomMoodDrawDialog(),
+                                final rawCustomBytes =
+                                    await showDialog<Uint8List>(
+                                      context: context,
+                                      builder: (_) =>
+                                          const _CustomMoodDrawDialog(),
+                                    );
+                                if (rawCustomBytes == null || !mounted) return;
+                                final customBytes = _toCustomMoodJpegBytes(
+                                  rawCustomBytes,
                                 );
-                                if (customBytes == null || !mounted) return;
                                 final key =
                                     'custom_${DateTime.now().millisecondsSinceEpoch}';
                                 final newMood = MoodOption.custom(
@@ -1878,17 +1994,21 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                   customIconBytes: customBytes,
                                 );
                                 setState(() => _customMoodOptions.add(newMood));
-                                setSheetState(() {
+                                safeSetSheetState(() {
                                   sheetCustomMoodOptions.add(newMood);
                                   selectedTabIndex = 1;
                                   deleteMode = false;
                                   isLoadingCustomMoods = false;
+                                  mineVisibleCount =
+                                      sheetCustomMoodOptions.length;
                                 });
-                                final saved = await _saveCustomMoodToStorage(
-                                  key,
-                                  customBytes,
-                                );
-                                if (!saved && mounted) {
+                                final savedMood =
+                                    await _saveCustomMoodToStorage(
+                                      key,
+                                      customBytes,
+                                      label: newMood.label,
+                                    );
+                                if (savedMood == null && mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
@@ -1899,6 +2019,22 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                       ),
                                     ),
                                   );
+                                } else if (savedMood != null && mounted) {
+                                  setState(() {
+                                    final index = _customMoodOptions.indexWhere(
+                                      (mood) => mood.key == key,
+                                    );
+                                    if (index >= 0) {
+                                      _customMoodOptions[index] = savedMood;
+                                    }
+                                  });
+                                  safeSetSheetState(() {
+                                    final index = sheetCustomMoodOptions
+                                        .indexWhere((mood) => mood.key == key);
+                                    if (index >= 0) {
+                                      sheetCustomMoodOptions[index] = savedMood;
+                                    }
+                                  });
                                 }
                                 return;
                               }
@@ -1909,17 +2045,20 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                 return;
                               }
                               setState(() => _customMoodOptions.add(photoMood));
-                              setSheetState(() {
+                              safeSetSheetState(() {
                                 sheetCustomMoodOptions.add(photoMood);
                                 selectedTabIndex = 1;
                                 deleteMode = false;
                                 isLoadingCustomMoods = false;
+                                mineVisibleCount =
+                                    sheetCustomMoodOptions.length;
                               });
-                              final saved = await _saveCustomMoodToStorage(
+                              final savedMood = await _saveCustomMoodToStorage(
                                 photoMood.key,
                                 photoMood.customIconBytes!,
+                                label: photoMood.label,
                               );
-                              if (!saved && mounted) {
+                              if (savedMood == null && mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
@@ -1930,6 +2069,24 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                     ),
                                   ),
                                 );
+                              } else if (savedMood != null && mounted) {
+                                setState(() {
+                                  final index = _customMoodOptions.indexWhere(
+                                    (mood) => mood.key == photoMood.key,
+                                  );
+                                  if (index >= 0) {
+                                    _customMoodOptions[index] = savedMood;
+                                  }
+                                  });
+                                  safeSetSheetState(() {
+                                    final index = sheetCustomMoodOptions
+                                        .indexWhere(
+                                        (mood) => mood.key == photoMood.key,
+                                      );
+                                  if (index >= 0) {
+                                    sheetCustomMoodOptions[index] = savedMood;
+                                  }
+                                });
                               }
                             },
                             style: FilledButton.styleFrom(
@@ -1958,7 +2115,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                             label: tr('기본', 'Default'),
                             selected: selectedTabIndex == 0,
                             onTap: () {
-                              setSheetState(() {
+                              safeSetSheetState(() {
                                 selectedTabIndex = 0;
                                 deleteMode = false;
                               });
@@ -1969,8 +2126,11 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                             label: tr('나의 것', 'Mine'),
                             selected: selectedTabIndex == 1,
                             onTap: () {
-                              setSheetState(() {
+                              safeSetSheetState(() {
                                 selectedTabIndex = 1;
+                                mineVisibleCount = sheetCustomMoodOptions.length
+                                    .clamp(0, _customMoodPageSize)
+                                    .toInt();
                               });
                             },
                           ),
@@ -1982,7 +2142,13 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                           builder: (_) {
                             final visibleMoods = selectedTabIndex == 0
                                 ? sheetBuiltInMoodOptions
-                                : sheetCustomMoodOptions;
+                                : sheetCustomMoodOptions
+                                      .take(mineVisibleCount)
+                                      .toList();
+                            final hasMoreCustomMoods =
+                                selectedTabIndex == 1 &&
+                                mineVisibleCount <
+                                    sheetCustomMoodOptions.length;
                             if (selectedTabIndex == 1 && isLoadingCustomMoods) {
                               return const Center(
                                 child: CircularProgressIndicator(),
@@ -2004,82 +2170,127 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                 ),
                               );
                             }
-                            return GridView.builder(
-                              itemCount: visibleMoods.length,
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 3,
-                                    mainAxisSpacing: 14,
-                                    crossAxisSpacing: 8,
-                                    childAspectRatio: 1.05,
-                                  ),
-                              itemBuilder: (context, index) {
-                                final mood = visibleMoods[index];
-                                final canDelete =
-                                    selectedTabIndex == 1 &&
-                                    _canDeleteCustomMood(mood.key);
-                                return Stack(
-                                  children: [
-                                    Positioned.fill(
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(14),
-                                        onTap: deleteMode
-                                            ? null
-                                            : () => Navigator.of(
-                                                sheetContext,
-                                              ).pop(mood),
-                                        child: Center(
-                                          child: _buildMoodAsset(
-                                            mood,
-                                            size: 56,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    if (deleteMode && canDelete)
-                                      Positioned(
-                                        top: 2,
-                                        right: 2,
-                                        child: Material(
-                                          color: Colors.transparent,
-                                          child: InkWell(
-                                            borderRadius: BorderRadius.circular(
-                                              99,
-                                            ),
-                                            onTap: () async {
-                                              await _confirmDeleteCustomMood(
-                                                mood,
-                                                onDeleted: () {
-                                                  setSheetState(() {
-                                                    sheetCustomMoodOptions
-                                                        .removeWhere(
-                                                          (item) =>
-                                                              item.key ==
-                                                              mood.key,
-                                                        );
-                                                  });
-                                                },
-                                              );
-                                            },
-                                            child: Container(
-                                              width: 20,
-                                              height: 20,
-                                              decoration: const BoxDecoration(
-                                                color: Color(0xFF111827),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                Icons.close_rounded,
-                                                size: 13,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                );
+                            return NotificationListener<ScrollNotification>(
+                              onNotification: (notification) {
+                                if (selectedTabIndex != 1 ||
+                                    !hasMoreCustomMoods ||
+                                    notification.metrics.axis !=
+                                        Axis.vertical) {
+                                  return false;
+                                }
+                                if (notification.metrics.extentAfter > 240) {
+                                  return false;
+                                }
+                                safeSetSheetState(() {
+                                  mineVisibleCount =
+                                      (mineVisibleCount + _customMoodPageSize)
+                                          .clamp(
+                                            0,
+                                            sheetCustomMoodOptions.length,
+                                          )
+                                          .toInt();
+                                });
+                                return false;
                               },
+                              child: GridView.builder(
+                                itemCount:
+                                    visibleMoods.length +
+                                    (hasMoreCustomMoods ? 1 : 0),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 3,
+                                      mainAxisSpacing: 14,
+                                      crossAxisSpacing: 8,
+                                      childAspectRatio: 1.05,
+                                    ),
+                                itemBuilder: (context, index) {
+                                  if (index >= visibleMoods.length) {
+                                    return Center(
+                                      child: Text(
+                                        tr('불러오는 중...', 'Loading...'),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF9CA3AF),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  final mood = visibleMoods[index];
+                                  final canDelete =
+                                      selectedTabIndex == 1 &&
+                                      _canDeleteCustomMood(mood.key);
+                                  return Stack(
+                                    children: [
+                                      Positioned.fill(
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(
+                                            14,
+                                          ),
+                                          onTap: deleteMode
+                                              ? null
+                                              : () => Navigator.of(
+                                                  sheetContext,
+                                                ).pop(mood),
+                                          child: Center(
+                                            child: _buildMoodAsset(
+                                              mood,
+                                              size: 56,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (deleteMode && canDelete)
+                                        Positioned(
+                                          top: 2,
+                                          right: 2,
+                                          child: Material(
+                                            color: Colors.transparent,
+                                            child: InkWell(
+                                              borderRadius:
+                                                  BorderRadius.circular(99),
+                                              onTap: () async {
+                                                await _confirmDeleteCustomMood(
+                                                  mood,
+                                                  onDeleted: () {
+                                                    safeSetSheetState(() {
+                                                      sheetCustomMoodOptions
+                                                          .removeWhere(
+                                                            (item) =>
+                                                                item.key ==
+                                                                mood.key,
+                                                          );
+                                                      mineVisibleCount =
+                                                          mineVisibleCount
+                                                              .clamp(
+                                                                0,
+                                                                sheetCustomMoodOptions
+                                                                    .length,
+                                                              )
+                                                              .toInt();
+                                                    });
+                                                  },
+                                                );
+                                              },
+                                              child: Container(
+                                                width: 20,
+                                                height: 20,
+                                                decoration: const BoxDecoration(
+                                                  color: Color(0xFF111827),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.close_rounded,
+                                                  size: 13,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
                             );
                           },
                         ),
@@ -2092,20 +2303,17 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
           },
         );
       },
-    );
-    isSheetClosed = true;
+    ).whenComplete(() {
+      isSheetClosed = true;
+    });
 
     if (!mounted || pickedMood == null) return;
 
-    final customBase64 =
-        pickedMood.customIconBase64 ??
-        (pickedMood.customIconBytes != null
-            ? base64Encode(pickedMood.customIconBytes!)
-            : null);
-
     await _openWritePageWithMood(
       pickedMood.key,
-      initialMoodCustomBase64: customBase64,
+      initialMoodCustomBase64: pickedMood.customIconBase64,
+      initialMoodStorageUrl: pickedMood.storageUrl,
+      initialMoodStoragePath: pickedMood.storagePath,
     );
   }
 
@@ -3016,6 +3224,19 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         );
       } catch (_) {}
     }
+    final remoteUrl = mood.storageUrl;
+    if ((remoteUrl ?? '').isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          remoteUrl!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+        ),
+      );
+    }
     final cachedBytes = _globalAssetCache[mood.key];
     if (cachedBytes != null) {
       return Image.memory(
@@ -3044,14 +3265,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     if (mood != null) {
       return mood;
     }
+    final storageUrl = (data['moodCustomStorageUrl'] ?? '').toString();
+    final storagePath = (data['moodCustomStoragePath'] ?? '').toString();
     final customBase64 = (data['moodCustomIcon'] ?? '').toString();
-    if (customBase64.isEmpty) {
+    if (storageUrl.isEmpty && storagePath.isEmpty && customBase64.isEmpty) {
       return null;
     }
     return MoodOption.custom(
       key: moodKey.isEmpty ? 'custom_saved' : moodKey,
       label: '커스텀',
       customIconBase64: customBase64,
+      storageUrl: storageUrl,
+      storagePath: storagePath,
     );
   }
 
@@ -3545,6 +3770,8 @@ class NewDiaryPage extends StatefulWidget {
     required this.initialMoodKey,
     required this.initialCustomMoodOptions,
     this.initialMoodCustomBase64,
+    this.initialMoodStorageUrl,
+    this.initialMoodStoragePath,
     this.docId,
     this.initialTitle,
     this.initialContentBlocks,
@@ -3555,6 +3782,8 @@ class NewDiaryPage extends StatefulWidget {
   final String initialMoodKey;
   final List<MoodOption> initialCustomMoodOptions;
   final String? initialMoodCustomBase64;
+  final String? initialMoodStorageUrl;
+  final String? initialMoodStoragePath;
   final String? docId;
   final String? initialTitle;
   final List<Map<String, dynamic>>? initialContentBlocks;
@@ -3569,9 +3798,12 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
   final _titleController = TextEditingController();
   final _imagePicker = ImagePicker();
   final List<MoodOption> _customMoodOptions = [];
+  final Map<String, Uint8List> _customMoodBytesCache = {};
   late DateTime _selectedDate;
   late String _selectedMoodKey;
   String? _selectedMoodCustomBase64;
+  String? _selectedMoodStorageUrl;
+  String? _selectedMoodStoragePath;
   late List<_DraftContentBlock> _draftBlocks;
   int _focusedBlockIndex = 0;
   bool _isPickingImage = false;
@@ -3588,6 +3820,8 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     _selectedDate = _normalizeDate(widget.initialDate);
     _selectedMoodKey = widget.initialMoodKey;
     _selectedMoodCustomBase64 = widget.initialMoodCustomBase64;
+    _selectedMoodStorageUrl = widget.initialMoodStorageUrl;
+    _selectedMoodStoragePath = widget.initialMoodStoragePath;
     if (widget.isEditMode && widget.initialTitle != null) {
       _titleController.text = widget.initialTitle!;
     }
@@ -3629,17 +3863,47 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
   List<MoodOption> get _editorMoodOptions {
     final options = [...kMoodOptions, ..._customMoodOptions];
     final hasPreset = options.any((mood) => mood.key == _selectedMoodKey);
-    if (!hasPreset && (_selectedMoodCustomBase64 ?? '').isNotEmpty) {
+    final hasStoredRemote =
+        (_selectedMoodStorageUrl ?? '').isNotEmpty ||
+        (_selectedMoodStoragePath ?? '').isNotEmpty;
+    if (!hasPreset &&
+        (hasStoredRemote || (_selectedMoodCustomBase64 ?? '').isNotEmpty)) {
       options.insert(
         0,
         MoodOption.custom(
           key: _selectedMoodKey,
           label: tr('현재 감정', 'Current Mood'),
           customIconBase64: _selectedMoodCustomBase64,
+          storageUrl: _selectedMoodStorageUrl,
+          storagePath: _selectedMoodStoragePath,
         ),
       );
     }
     return options;
+  }
+
+  Future<String?> _resolveCustomMoodBase64(MoodOption mood) async {
+    if ((mood.customIconBase64 ?? '').isNotEmpty) {
+      return mood.customIconBase64;
+    }
+    if (mood.customIconBytes != null && mood.customIconBytes!.isNotEmpty) {
+      return base64Encode(mood.customIconBytes!);
+    }
+    final cachedBytes = _customMoodBytesCache[mood.key];
+    if (cachedBytes != null && cachedBytes.isNotEmpty) {
+      return base64Encode(cachedBytes);
+    }
+    try {
+      final ref = (mood.storageUrl ?? '').isNotEmpty
+          ? FirebaseStorage.instance.refFromURL(mood.storageUrl!)
+          : FirebaseStorage.instance.ref().child(mood.storagePath!);
+      final bytes = await ref.getData();
+      if (bytes == null || bytes.isEmpty) return null;
+      _customMoodBytesCache[mood.key] = bytes;
+      return base64Encode(bytes);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _pickEditorMood() async {
@@ -3709,13 +3973,13 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       return;
     }
 
+    final customBase64 = await _resolveCustomMoodBase64(picked);
+    if (!mounted) return;
     setState(() {
       _selectedMoodKey = picked.key;
-      _selectedMoodCustomBase64 =
-          picked.customIconBase64 ??
-          (picked.customIconBytes != null
-              ? base64Encode(picked.customIconBytes!)
-              : null);
+      _selectedMoodCustomBase64 = customBase64;
+      _selectedMoodStorageUrl = picked.storageUrl;
+      _selectedMoodStoragePath = picked.storagePath;
     });
   }
 
@@ -4345,7 +4609,8 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         'content': draftText,
         'contentBlocks': contentBlocks,
         'moodKey': _selectedMoodKey,
-        'moodCustomIcon': _selectedMoodCustomBase64,
+        'moodCustomStorageUrl': _selectedMoodStorageUrl,
+        'moodCustomStoragePath': _selectedMoodStoragePath,
         'imageUrl': firstImageUrl,
         'writtenAt': Timestamp.fromDate(_selectedDate),
       };
@@ -4353,7 +4618,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         await FirebaseFirestore.instance
             .collection(widget.userEmail)
             .doc(widget.docId)
-            .update(payload);
+            .update({...payload, 'moodCustomIcon': FieldValue.delete()});
         final removedImageUrls = previousImageUrls.difference(currentImageUrls);
         await _deleteStorageFiles(removedImageUrls);
       } else {
@@ -4448,6 +4713,19 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
         );
       } catch (_) {}
     }
+    final remoteUrl = mood.storageUrl;
+    if ((remoteUrl ?? '').isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          remoteUrl!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+        ),
+      );
+    }
     final cachedBytes = _globalAssetCache[mood.key];
     if (cachedBytes != null) {
       return Image.memory(
@@ -4478,18 +4756,21 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
     const textMain = Color(0xFF1F2937);
     const textSub = Color(0xFF8A94A6);
     const accent = Color(0xFF111827);
-    MoodOption? selectedMood;
-    for (final mood in kMoodOptions) {
-      if (mood.key == _selectedMoodKey) {
-        selectedMood = mood;
-        break;
-      }
-    }
-    if (selectedMood == null && (_selectedMoodCustomBase64 ?? '').isNotEmpty) {
+    MoodOption? selectedMood = _editorMoodOptions.cast<MoodOption?>().firstWhere(
+      (mood) => mood?.key == _selectedMoodKey,
+      orElse: () => null,
+    );
+    final hasStoredRemote =
+        (_selectedMoodStorageUrl ?? '').isNotEmpty ||
+        (_selectedMoodStoragePath ?? '').isNotEmpty;
+    if (selectedMood == null &&
+        (hasStoredRemote || (_selectedMoodCustomBase64 ?? '').isNotEmpty)) {
       selectedMood = MoodOption.custom(
         key: _selectedMoodKey,
         label: tr('커스텀', 'Custom'),
-        customIconBase64: _selectedMoodCustomBase64!,
+        customIconBase64: _selectedMoodCustomBase64,
+        storageUrl: _selectedMoodStorageUrl,
+        storagePath: _selectedMoodStoragePath,
       );
     }
 
@@ -6182,6 +6463,18 @@ DateTime _normalizeDate(DateTime date) {
   return DateTime(date.year, date.month, date.day);
 }
 
+Uint8List _toCustomMoodJpegBytes(Uint8List sourceBytes) {
+  try {
+    final decoded = img.decodeImage(sourceBytes);
+    if (decoded == null) {
+      return sourceBytes;
+    }
+    return Uint8List.fromList(img.encodeJpg(decoded, quality: 82));
+  } catch (_) {
+    return sourceBytes;
+  }
+}
+
 BoxDecoration _calendarDecoration() {
   return BoxDecoration(
     borderRadius: BorderRadius.circular(24),
@@ -6201,6 +6494,10 @@ class MoodOption {
     this.fallbackEmoji = '🙂',
     this.customIconBase64,
     this.customIconBytes,
+    this.storageUrl,
+    this.storagePath,
+    this.thumbnailUrl,
+    this.thumbnailPath,
   });
 
   factory MoodOption.custom({
@@ -6208,6 +6505,10 @@ class MoodOption {
     required String label,
     String? customIconBase64,
     Uint8List? customIconBytes,
+    String? storageUrl,
+    String? storagePath,
+    String? thumbnailUrl,
+    String? thumbnailPath,
   }) {
     return MoodOption(
       key: key,
@@ -6215,6 +6516,10 @@ class MoodOption {
       backgroundColor: const Color(0xFFF1F3F5),
       customIconBase64: customIconBase64,
       customIconBytes: customIconBytes,
+      storageUrl: storageUrl,
+      storagePath: storagePath,
+      thumbnailUrl: thumbnailUrl,
+      thumbnailPath: thumbnailPath,
       fallbackEmoji: '🙂',
     );
   }
@@ -6226,6 +6531,10 @@ class MoodOption {
   final String fallbackEmoji;
   final String? customIconBase64;
   final Uint8List? customIconBytes;
+  final String? storageUrl;
+  final String? storagePath;
+  final String? thumbnailUrl;
+  final String? thumbnailPath;
 }
 
 final Map<String, Uint8List> _globalAssetCache = {};

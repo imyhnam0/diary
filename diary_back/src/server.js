@@ -14,49 +14,30 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 function buildPrompt(language, targets) {
-  if (language === 'en') {
-    return `
+  return `
 You are a diary sentence editor.
 
-Rewrite the "text" field of each object in the JSON array into natural, fluent English diary style.
+Rewrite only the "text" field of each object in the JSON array.
 
 Rules:
-- Preserve the original meaning as much as possible
-- Preserve the original tone, politeness level, and mood of the sentence
-- Correct typos, spacing issues, awkward grammar, and broken sentences
-- If the sentence is messy or unclear, infer the most likely intended meaning and rewrite it naturally
-- Do not add new facts, emotions, or details that are not implied
-- Do not exaggerate
-- Keep the original JSON structure unchanged
-- Keep each index unchanged
-- Modify only the "text" field
-- Return only a valid JSON array
-- Do not include explanations or markdown
+- Keep the language of each target text exactly as the original text.
+- Do not translate.
+- If a target text is Korean, output Korean.
+- If a target text is English, output English.
+- If a target text is Japanese, output Japanese.
+- If targets contain mixed languages, keep each item in its own original language.
+- Preserve original meaning as much as possible.
+- Preserve original tone, politeness level, and emotion.
+- Correct typos, spacing, awkward grammar, and broken sentences naturally.
+- If sentence is unclear, infer likely intent conservatively.
+- Do not add new facts or events.
+- Keep JSON structure unchanged.
+- Keep each index unchanged.
+- Modify only "text".
+- Return only a valid JSON array.
+- Do not include explanations or markdown.
 
 Input:
-${JSON.stringify(targets)}
-`.trim();
-  }
-
-  return `
-너는 일기 문장을 다듬는 편집자야.
-
-아래 JSON 배열의 각 객체에서 "text" 필드만 자연스럽고 읽기 좋은 한국어 일기체로 바꿔줘.
-
-규칙:
-- 원래 의미를 최대한 유지할 것
-- 원문의 말투, 높임말/반말, 감정 톤을 최대한 유지할 것
-- 오타, 띄어쓰기, 어색한 문법, 비문을 자연스럽게 고칠 것
-- 문장이 두서없거나 불완전해도 사용자의 의도를 최대한 추론해서 자연스럽게 정리할 것
-- 원문에 없는 사실, 감정, 상황을 새로 지어내지 말 것
-- 과장하지 말 것
-- JSON 구조는 그대로 유지할 것
-- 각 index는 그대로 유지할 것
-- "text" 필드만 수정할 것
-- 출력은 유효한 JSON 배열만 반환할 것
-- 설명, 주석, 마크다운은 포함하지 말 것
-
-입력:
 ${JSON.stringify(targets)}
 `.trim();
 }
