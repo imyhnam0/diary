@@ -1672,8 +1672,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                   icon: Icons.photo_library_outlined,
                   title: tr('사진으로 넣기', 'Use Photo'),
                   subtitle: tr(
-                    '갤러리 사진을 원형으로 잘라서 아이콘으로 만들기',
-                    'Crop a gallery photo into a circular icon',
+                    '갤러리 사진을 정사각형으로 잘라서 아이콘으로 만들기',
+                    'Crop a gallery photo into a square icon',
                   ),
                   onTap: () =>
                       Navigator.of(sheetContext).pop(_IconAddMode.photo),
@@ -1764,8 +1764,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
             SnackBar(
               content: Text(
                 tr(
-                  '사진을 원형 아이콘으로 만들지 못했습니다.',
-                  'Failed to make a circular photo icon.',
+                  '사진을 정사각형 아이콘으로 만들지 못했습니다.',
+                  'Failed to make a square photo icon.',
                 ),
               ),
             ),
@@ -3175,127 +3175,150 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                   if (_isListMode)
                     Expanded(child: _buildDiaryListView(diaries))
                   else ...[
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(12, 52, 12, 46),
-                      decoration: _calendarDecoration(),
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final cellWidth = constraints.maxWidth / 7;
-                          final rowHeight = cellWidth.clamp(32.0, 40.0);
-                          final emojiSize = math.min(rowHeight * 0.64, 25.0);
-                          final dayTextSize = (rowHeight * 0.30).clamp(
-                            12.0,
-                            15.0,
-                          );
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(18, 36, 24, 44),
+                        decoration: _calendarDecoration(),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final cellWidth = constraints.maxWidth / 7;
+                            const headerHeight = 44.0;
+                            const daysOfWeekHeight = 18.0;
+                            final maxRowHeightByHeight =
+                                (constraints.maxHeight -
+                                            headerHeight -
+                                            daysOfWeekHeight) /
+                                        6;
+                            final rowHeight = math.min(
+                              cellWidth.clamp(56.0, 68.0),
+                              maxRowHeightByHeight.clamp(42.0, 68.0),
+                            );
+                            final emojiSize = math.min(rowHeight * 0.28, 18.0);
+                            final dayTextSize = (rowHeight * 0.17).clamp(
+                              11.0,
+                              14.0,
+                            );
+                            final titleTextSize = (rowHeight * 0.34).clamp(
+                              18.0,
+                              22.0,
+                            );
+                            final dowTextSize = (rowHeight * 0.21).clamp(
+                              12.0,
+                              15.0,
+                            );
 
-                          return TableCalendar<DateTime>(
-                            firstDay: DateTime(2000, 1, 1),
-                            lastDay: DateTime(2100, 12, 31),
-                            focusedDay: _focusedDay,
-                            rowHeight: rowHeight,
-                            availableCalendarFormats: const {
-                              CalendarFormat.month: 'Month',
-                            },
-                            startingDayOfWeek: StartingDayOfWeek.sunday,
-                            headerStyle: HeaderStyle(
-                              titleCentered: true,
-                              formatButtonVisible: false,
-                              leftChevronVisible: true,
-                              rightChevronVisible: true,
-                              titleTextStyle: GoogleFonts.nanumPenScript(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            calendarStyle: const CalendarStyle(
-                              outsideDaysVisible: false,
-                              isTodayHighlighted: false,
-                              defaultDecoration: BoxDecoration(),
-                              weekendDecoration: BoxDecoration(),
-                              selectedDecoration: BoxDecoration(),
-                              todayDecoration: BoxDecoration(),
-                            ),
-                            selectedDayPredicate: (day) =>
-                                isSameDay(day, _selectedDay),
-                            onPageChanged: (focusedDay) {
-                              setState(() {
-                                _focusedDay = focusedDay;
-                              });
-                            },
-                            onDaySelected: (selectedDay, focusedDay) {
-                              setState(() {
-                                _selectedDay = _normalizeDate(selectedDay);
-                                _focusedDay = focusedDay;
-                              });
-                            },
-                            calendarBuilders: CalendarBuilders(
-                              headerTitleBuilder: (context, day) {
-                                return Center(
-                                  child: Text(
-                                    isEnglish
-                                        ? '${day.month}'
-                                        : '${day.month}월',
-                                    style: GoogleFonts.nanumPenScript(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 24,
-                                    ),
-                                  ),
-                                );
+                            return TableCalendar<DateTime>(
+                              firstDay: DateTime(2000, 1, 1),
+                              lastDay: DateTime(2100, 12, 31),
+                              focusedDay: _focusedDay,
+                              rowHeight: rowHeight,
+                              daysOfWeekHeight: daysOfWeekHeight,
+                              availableCalendarFormats: const {
+                                CalendarFormat.month: 'Month',
                               },
-                              dowBuilder: (context, day) {
-                                final labels = isEnglish
-                                    ? const [
-                                        'Sun',
-                                        'Mon',
-                                        'Tue',
-                                        'Wed',
-                                        'Thu',
-                                        'Fri',
-                                        'Sat',
-                                      ]
-                                    : const ['일', '월', '화', '수', '목', '금', '토'];
-                                final label = labels[day.weekday % 7];
-                                return Center(
-                                  child: Text(
-                                    label,
+                              startingDayOfWeek: StartingDayOfWeek.sunday,
+                              headerStyle: HeaderStyle(
+                                titleCentered: true,
+                                formatButtonVisible: false,
+                                leftChevronVisible: true,
+                                rightChevronVisible: true,
+                                headerPadding: const EdgeInsets.only(bottom: 4),
+                                titleTextStyle: GoogleFonts.nanumPenScript(
+                                  fontSize: titleTextSize,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              calendarStyle: const CalendarStyle(
+                                outsideDaysVisible: false,
+                                isTodayHighlighted: false,
+                                defaultDecoration: BoxDecoration(),
+                                weekendDecoration: BoxDecoration(),
+                                selectedDecoration: BoxDecoration(),
+                                todayDecoration: BoxDecoration(),
+                              ),
+                              selectedDayPredicate: (day) =>
+                                  isSameDay(day, _selectedDay),
+                              onPageChanged: (focusedDay) {
+                                setState(() {
+                                  _focusedDay = focusedDay;
+                                });
+                              },
+                              onDaySelected: (selectedDay, focusedDay) {
+                                setState(() {
+                                  _selectedDay = _normalizeDate(selectedDay);
+                                  _focusedDay = focusedDay;
+                                });
+                              },
+                              calendarBuilders: CalendarBuilders(
+                                headerTitleBuilder: (context, day) {
+                                  return Center(
+                                    child: Text(
+                                      isEnglish
+                                          ? '${day.month}'
+                                          : '${day.month}월',
+                                      style: GoogleFonts.nanumPenScript(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: titleTextSize,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                dowBuilder: (context, day) {
+                                  final labels = isEnglish
+                                      ? const [
+                                          'Sun',
+                                          'Mon',
+                                          'Tue',
+                                          'Wed',
+                                          'Thu',
+                                          'Fri',
+                                          'Sat',
+                                        ]
+                                      : const ['일', '월', '화', '수', '목', '금', '토'];
+                                  final label = labels[day.weekday % 7];
+                                  return Center(
+                                    child: Text(
+                                      label,
                                     style: GoogleFonts.nanumPenScript(
                                       color: const Color(0xFF888888),
-                                      fontSize: 15,
+                                      fontSize: dowTextSize,
                                       fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                );
-                              },
-                              defaultBuilder: (context, day, focusedDay) {
-                                return _buildCalendarCell(
-                                  day: day,
-                                  isSelected: false,
-                                  diary: diaryByDate[_normalizeDate(day)],
-                                  emojiSize: emojiSize,
-                                  dayTextSize: dayTextSize,
-                                );
-                              },
-                              selectedBuilder: (context, day, focusedDay) {
-                                return _buildCalendarCell(
-                                  day: day,
-                                  isSelected: true,
-                                  diary: diaryByDate[_normalizeDate(day)],
-                                  emojiSize: emojiSize,
-                                  dayTextSize: dayTextSize,
-                                );
-                              },
-                              todayBuilder: (context, day, focusedDay) {
-                                return _buildCalendarCell(
-                                  day: day,
-                                  isSelected: isSameDay(day, _selectedDay),
-                                  diary: diaryByDate[_normalizeDate(day)],
-                                  emojiSize: emojiSize,
-                                  dayTextSize: dayTextSize,
-                                );
-                              },
-                            ),
-                          );
-                        },
+                                  );
+                                },
+                                defaultBuilder: (context, day, focusedDay) {
+                                  return _buildCalendarCell(
+                                    day: day,
+                                    isSelected: false,
+                                    diary: diaryByDate[_normalizeDate(day)],
+                                    emojiSize: emojiSize,
+                                    dayTextSize: dayTextSize,
+                                  );
+                                },
+                                selectedBuilder: (context, day, focusedDay) {
+                                  return _buildCalendarCell(
+                                    day: day,
+                                    isSelected: true,
+                                    diary: diaryByDate[_normalizeDate(day)],
+                                    emojiSize: emojiSize,
+                                    dayTextSize: dayTextSize,
+                                  );
+                                },
+                                todayBuilder: (context, day, focusedDay) {
+                                  return _buildCalendarCell(
+                                    day: day,
+                                    isSelected: isSameDay(day, _selectedDay),
+                                    diary: diaryByDate[_normalizeDate(day)],
+                                    emojiSize: emojiSize,
+                                    dayTextSize: dayTextSize,
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -3334,68 +3357,121 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
   }) {
     final mood = diary == null ? null : _resolveMoodFromDiary(diary);
     final hasDiary = diary != null;
+    final title =
+        diary == null ? '' : (diary['title'] ?? '').toString().trim();
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+      margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFE8E8E8) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
+        border: isSelected
+            ? Border.all(color: const Color(0xFF111827), width: 1.1)
+            : null,
       ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (hasDiary && mood != null)
-            _buildMoodAsset(mood, size: emojiSize)
-          else
-            Text(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(5, 4, 5, 3),
+            child: Text(
               '${day.day}',
               style: GoogleFonts.nanumPenScript(
                 fontSize: dayTextSize,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: const Color(0xFF8D8D8D),
+                color: hasDiary
+                    ? const Color(0xFF4B5563)
+                    : const Color(0xFF8D8D8D),
               ),
             ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(1.5, 0, 1.5, 4),
+              child: hasDiary
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(7),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ColoredBox(
+                            color: Colors.white,
+                            child: mood != null
+                                ? _buildMoodAsset(
+                                    mood,
+                                    size: math.max(emojiSize * 3.2, 48),
+                                    fit: BoxFit.cover,
+                                  )
+                                : const SizedBox.shrink(),
+                          ),
+                          Positioned(
+                            left: 4,
+                            right: 4,
+                            bottom: 4,
+                            child: Text(
+                              title.isEmpty ? tr('제목 없음', 'Untitled') : title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.left,
+                              style: GoogleFonts.notoSansKr(
+                                fontSize: 8.5,
+                                height: 1.1,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                                shadows: const [
+                                  Shadow(
+                                    color: Color(0xCC000000),
+                                    blurRadius: 4,
+                                    offset: Offset(0, 1),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMoodAsset(MoodOption mood, {required double size}) {
+  Widget _buildMoodAsset(
+    MoodOption mood, {
+    required double size,
+    BoxFit fit = BoxFit.cover,
+  }) {
     if (mood.customIconBytes != null) {
-      return ClipOval(
-        child: Image.memory(
-          mood.customIconBytes!,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-        ),
+      return Image.memory(
+        mood.customIconBytes!,
+        width: size,
+        height: size,
+        fit: fit,
       );
     }
     if (mood.customIconBase64 != null && mood.customIconBase64!.isNotEmpty) {
       try {
         final bytes = base64Decode(mood.customIconBase64!);
-        return ClipOval(
-          child: Image.memory(
-            bytes,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-          ),
+        return Image.memory(
+          bytes,
+          width: size,
+          height: size,
+          fit: fit,
         );
       } catch (_) {}
     }
     final remoteUrl = mood.storageUrl;
     if ((remoteUrl ?? '').isNotEmpty) {
-      return ClipOval(
-        child: Image.network(
-          remoteUrl!,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
-        ),
+      return Image.network(
+        remoteUrl!,
+        width: size,
+        height: size,
+        fit: fit,
+        errorBuilder: (_, __, ___) =>
+            Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
       );
     }
     final cachedBytes = _globalAssetCache[mood.key];
@@ -3404,7 +3480,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         cachedBytes,
         width: size,
         height: size,
-        fit: BoxFit.contain,
+        fit: fit == BoxFit.cover ? BoxFit.contain : fit,
       );
     }
     if (mood.assetPath.isNotEmpty) {
@@ -3412,7 +3488,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         mood.assetPath,
         width: size,
         height: size,
-        fit: BoxFit.contain,
+        fit: fit == BoxFit.cover ? BoxFit.contain : fit,
         errorBuilder: (_, __, ___) =>
             Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
       );
@@ -4988,39 +5064,33 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
 
   Widget _buildEditorMoodAsset(MoodOption mood, {required double size}) {
     if (mood.customIconBytes != null) {
-      return ClipOval(
-        child: Image.memory(
-          mood.customIconBytes!,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-        ),
+      return Image.memory(
+        mood.customIconBytes!,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
       );
     }
     if (mood.customIconBase64 != null && mood.customIconBase64!.isNotEmpty) {
       try {
         final bytes = base64Decode(mood.customIconBase64!);
-        return ClipOval(
-          child: Image.memory(
-            bytes,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-          ),
+        return Image.memory(
+          bytes,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
         );
       } catch (_) {}
     }
     final remoteUrl = mood.storageUrl;
     if ((remoteUrl ?? '').isNotEmpty) {
-      return ClipOval(
-        child: Image.network(
-          remoteUrl!,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
-              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
-        ),
+      return Image.network(
+        remoteUrl!,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+            Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
       );
     }
     final cachedBytes = _globalAssetCache[mood.key];
@@ -5500,9 +5570,7 @@ class _PhotoMoodCropDialogState extends State<_PhotoMoodCropDialog> {
       final canvas = Canvas(recorder);
       final scale = _outputSize / _cropSize;
       canvas.scale(scale);
-      canvas.clipPath(
-        Path()..addOval(const Rect.fromLTWH(0, 0, _cropSize, _cropSize)),
-      );
+      canvas.clipRect(const Rect.fromLTWH(0, 0, _cropSize, _cropSize));
       canvas.transform(_controller.value.storage);
       canvas.drawImageRect(
         _image!,
@@ -5568,8 +5636,8 @@ class _PhotoMoodCropDialogState extends State<_PhotoMoodCropDialog> {
             const SizedBox(height: 4),
             Text(
               tr(
-                '사진을 움직이거나 확대해서 원 안에 원하는 부분을 맞춰주세요.',
-                'Move or zoom the photo to fit the part you want inside the circle.',
+                '사진을 움직이거나 확대해서 정사각형 안에 원하는 부분을 맞춰주세요.',
+                'Move or zoom the photo to fit the part you want inside the square.',
               ),
               style: const TextStyle(
                 color: Color(0xFF9CA3AF),
@@ -5604,7 +5672,7 @@ class _PhotoMoodCropDialogState extends State<_PhotoMoodCropDialog> {
                           ),
                           IgnorePointer(
                             child: CustomPaint(
-                              painter: _CircleCropOverlayPainter(),
+                              painter: _SquareCropOverlayPainter(),
                             ),
                           ),
                         ],
@@ -6114,23 +6182,16 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
     final canvas = Canvas(recorder);
     const outSize = 512.0;
     final scale = outSize / _canvasSize;
-    final center = const Offset(outSize / 2, outSize / 2);
-    const radius = outSize / 2;
-
-    // Clip to circle and fill white inside
-    canvas.save();
-    canvas.clipPath(
-      Path()..addOval(Rect.fromCircle(center: center, radius: radius)),
+    canvas.drawRect(
+      const Rect.fromLTWH(0, 0, outSize, outSize),
+      Paint()..color = Colors.white,
     );
-    canvas.drawCircle(center, radius, Paint()..color = Colors.white);
     _SketchPainter.drawStrokes(canvas, _strokes, scale: scale);
-    canvas.restore();
 
     final image = await recorder.endRecording().toImage(
       outSize.toInt(),
       outSize.toInt(),
     );
-    // PNG 형식으로 저장하여 원 바깥이 투명하게 유지
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null || !mounted) {
       return;
@@ -6181,8 +6242,8 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
                   const SizedBox(height: 4),
                   Text(
                     tr(
-                      '원 안에 나만의 기분 아이콘을 그려보세요',
-                      'Draw your own mood icon inside the circle',
+                      '정사각형 안에 나만의 기분 아이콘을 그려보세요',
+                      'Draw your own mood icon inside the square',
                     ),
                     style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                   ),
@@ -6208,11 +6269,12 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
                           Container(
                             width: canvasLength,
                             height: canvasLength,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
+                            decoration: BoxDecoration(
                               color: Colors.white,
+                              borderRadius: BorderRadius.circular(18),
                             ),
-                            child: ClipOval(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(18),
                               child: Listener(
                                 behavior: HitTestBehavior.opaque,
                                 onPointerDown: _handlePointerDown,
@@ -6235,7 +6297,7 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
                           IgnorePointer(
                             child: CustomPaint(
                               size: Size(canvasLength, canvasLength),
-                              painter: _DashedCircleBorderPainter(),
+                              painter: _DashedSquareBorderPainter(),
                             ),
                           ),
                         ],
@@ -6683,50 +6745,126 @@ Future<List<Map<String, dynamic>>> _listMoodRowsFromStorage(
   }
 }
 
-class _DashedCircleBorderPainter extends CustomPainter {
+class _DashedSquareBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 1.5;
     final paint = Paint()
       ..color = const Color(0xFFAAAAAA)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
-
-    const dashCount = 36;
-    const totalAngle = 2 * math.pi;
-    const dashFraction = 0.55;
-
-    for (int i = 0; i < dashCount; i++) {
-      final startAngle = (i / dashCount) * totalAngle;
-      final sweepAngle = (1 / dashCount) * totalAngle * dashFraction;
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        startAngle,
-        sweepAngle,
-        false,
-        paint,
-      );
-    }
+    const radius = Radius.circular(18);
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(1, 1, size.width - 2, size.height - 2),
+      radius,
+    );
+    _drawDashedLine(
+      canvas,
+      Offset(rect.left + radius.x, rect.top),
+      Offset(rect.right - radius.x, rect.top),
+      paint,
+    );
+    _drawDashedLine(
+      canvas,
+      Offset(rect.right, rect.top + radius.y),
+      Offset(rect.right, rect.bottom - radius.y),
+      paint,
+    );
+    _drawDashedLine(
+      canvas,
+      Offset(rect.right - radius.x, rect.bottom),
+      Offset(rect.left + radius.x, rect.bottom),
+      paint,
+    );
+    _drawDashedLine(
+      canvas,
+      Offset(rect.left, rect.bottom - radius.y),
+      Offset(rect.left, rect.top + radius.y),
+      paint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: Offset(rect.left + radius.x, rect.top + radius.y),
+        radius: radius.x,
+      ),
+      math.pi,
+      math.pi / 2,
+      false,
+      paint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: Offset(rect.right - radius.x, rect.top + radius.y),
+        radius: radius.x,
+      ),
+      -math.pi / 2,
+      math.pi / 2,
+      false,
+      paint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: Offset(rect.right - radius.x, rect.bottom - radius.y),
+        radius: radius.x,
+      ),
+      0,
+      math.pi / 2,
+      false,
+      paint,
+    );
+    canvas.drawArc(
+      Rect.fromCircle(
+        center: Offset(rect.left + radius.x, rect.bottom - radius.y),
+        radius: radius.x,
+      ),
+      math.pi / 2,
+      math.pi / 2,
+      false,
+      paint,
+    );
   }
 
   @override
-  bool shouldRepaint(_DashedCircleBorderPainter oldDelegate) => false;
+  bool shouldRepaint(_DashedSquareBorderPainter oldDelegate) => false;
 }
 
-class _CircleCropOverlayPainter extends CustomPainter {
+void _drawDashedLine(
+  Canvas canvas,
+  Offset start,
+  Offset end,
+  Paint paint,
+) {
+  const dash = 10.0;
+  const gap = 6.0;
+  final delta = end - start;
+  final distance = delta.distance;
+  if (distance <= 0) return;
+  final direction = delta / distance;
+  double progress = 0;
+  while (progress < distance) {
+    final segmentStart = start + direction * progress;
+    final segmentEnd = start + direction * math.min(progress + dash, distance);
+    canvas.drawLine(segmentStart, segmentEnd, paint);
+    progress += dash + gap;
+  }
+}
+
+class _SquareCropOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
+    final cropRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      const Radius.circular(18),
+    );
     final overlayPath = Path()
       ..fillType = PathFillType.evenOdd
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..addOval(Rect.fromLTWH(0, 0, size.width, size.height));
+      ..addRRect(cropRect);
     canvas.drawPath(
       overlayPath,
       Paint()..color = Colors.black.withValues(alpha: 0.42),
     );
-    canvas.drawOval(
-      Rect.fromLTWH(0, 0, size.width, size.height),
+    canvas.drawRRect(
+      cropRect,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5
