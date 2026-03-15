@@ -38,18 +38,24 @@ import WidgetKit
           }
           let today = (args["today"] as? String) ?? ""
           let todayImage = (args["todayImage"] as? String) ?? ""
+          let yesterday = (args["yesterday"] as? String) ?? ""
+          let yesterdayImage = (args["yesterdayImage"] as? String) ?? ""
           let recent = (args["recent"] as? [String]) ?? []
           let recentImages = (args["recentImages"] as? [String]) ?? []
           let month = (args["month"] as? String) ?? ""
           let monthMap = (args["monthMap"] as? [String: String]) ?? [:]
-          let monthMapImages = (args["monthMapImages"] as? [String: String]) ?? [:]
+          let monthMapPhotos = (args["monthMapPhotos"] as? [String: String]) ?? [:]
+          let monthMapTitles = (args["monthMapTitles"] as? [String: String]) ?? [:]
           defaults.set(today, forKey: "widget_today_emoji")
           defaults.set(todayImage, forKey: "widget_today_image_base64")
+          defaults.set(yesterday, forKey: "widget_yesterday_emoji")
+          defaults.set(yesterdayImage, forKey: "widget_yesterday_image_base64")
           defaults.set(recent, forKey: "widget_recent_emojis")
           defaults.set(recentImages, forKey: "widget_recent_images")
           defaults.set(month, forKey: "widget_month_key")
           defaults.set(monthMap, forKey: "widget_month_map")
-          defaults.set(monthMapImages, forKey: "widget_month_map_images")
+          defaults.set(monthMapPhotos, forKey: "widget_month_map_photos")
+          defaults.set(monthMapTitles, forKey: "widget_month_map_titles")
         case "syncWidgetLanguage":
           let args = call.arguments as? [String: Any]
           let language = (args?["language"] as? String) ?? "ko"

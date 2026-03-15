@@ -919,6 +919,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         'day': _normalizeDate(writtenAt.toDate()),
         'emoji': mood?.fallbackEmoji ?? _widgetEmojiFromDiaryData(data),
         'image': await _widgetImageBase64FromMood(mood),
+        'title': (data['title'] ?? '').toString().trim(),
       });
     }
     normalized.sort(
@@ -926,12 +927,21 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     );
 
     final today = _normalizeDate(DateTime.now());
+    final yesterday = _normalizeDate(today.subtract(const Duration(days: 1)));
     String todayEmoji = '';
     String todayImage = '';
+    String yesterdayEmoji = '';
+    String yesterdayImage = '';
     for (final item in normalized) {
-      if (isSameDay(item['day'] as DateTime, today)) {
+      final day = item['day'] as DateTime;
+      if (isSameDay(day, today)) {
         todayEmoji = (item['emoji'] ?? '').toString();
         todayImage = (item['image'] ?? '').toString();
+      } else if (isSameDay(day, yesterday)) {
+        yesterdayEmoji = (item['emoji'] ?? '').toString();
+        yesterdayImage = (item['image'] ?? '').toString();
+      }
+      if (todayEmoji.isNotEmpty && yesterdayEmoji.isNotEmpty) {
         break;
       }
     }
@@ -948,6 +958,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}';
     final monthEmojiByDay = <String, String>{};
     final monthImageByDay = <String, String>{};
+    final monthTitleByDay = <String, String>{};
     for (final item in normalized) {
       final day = item['day'] as DateTime;
       if (day.year != today.year || day.month != today.month) {
@@ -965,15 +976,22 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       if (image.isNotEmpty) {
         monthImageByDay[dayKey] = image;
       }
+      final title = (item['title'] ?? '').toString();
+      if (title.isNotEmpty) {
+        monthTitleByDay[dayKey] = title;
+      }
     }
     final payload = jsonEncode({
       'today': todayEmoji,
       'todayImage': todayImage,
+      'yesterday': yesterdayEmoji,
+      'yesterdayImage': yesterdayImage,
       'recent': recentEmojis,
       'recentImages': recentImages,
       'month': monthKey,
       'monthMap': monthEmojiByDay,
-      'monthMapImages': monthImageByDay,
+      'monthMapPhotos': monthImageByDay,
+      'monthMapTitles': monthTitleByDay,
     });
     if (_lastWidgetPayload == payload) {
       return;
@@ -985,6 +1003,8 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('widget_today_emoji', todayEmoji);
       await prefs.setString('widget_today_image_base64', todayImage);
+      await prefs.setString('widget_yesterday_emoji', yesterdayEmoji);
+      await prefs.setString('widget_yesterday_image_base64', yesterdayImage);
       await prefs.setString(
         'widget_recent_emojis_json',
         jsonEncode(recentEmojis),
@@ -1002,6 +1022,10 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
         'widget_month_map_images_json',
         jsonEncode(monthImageByDay),
       );
+      await prefs.setString(
+        'widget_month_map_titles_json',
+        jsonEncode(monthTitleByDay),
+      );
       await prefs.setInt(
         'widget_updated_at',
         DateTime.now().millisecondsSinceEpoch,
@@ -1009,11 +1033,14 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       await _widgetChannel.invokeMethod('updateDiaryWidget', {
         'today': todayEmoji,
         'todayImage': todayImage,
+        'yesterday': yesterdayEmoji,
+        'yesterdayImage': yesterdayImage,
         'recent': recentEmojis,
         'recentImages': recentImages,
         'month': monthKey,
         'monthMap': monthEmojiByDay,
-        'monthMapImages': monthImageByDay,
+        'monthMapPhotos': monthImageByDay,
+        'monthMapTitles': monthTitleByDay,
       });
     } catch (_) {
       _lastWidgetPayload = previousPayload;
@@ -3178,7 +3205,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(24),
                       child: Container(
-                        padding: const EdgeInsets.fromLTRB(18, 36, 24, 44),
+                        padding: const EdgeInsets.fromLTRB(18, 36, 24, 60),
                         decoration: _calendarDecoration(),
                         child: LayoutBuilder(
                           builder: (context, constraints) {
@@ -3397,10 +3424,18 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                           ColoredBox(
                             color: Colors.white,
                             child: mood != null
-                                ? _buildMoodAsset(
-                                    mood,
-                                    size: math.max(emojiSize * 3.2, 48),
-                                    fit: BoxFit.cover,
+                                ? Center(
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: SizedBox.square(
+                                        dimension: math.max(emojiSize * 3.0, 44),
+                                        child: _buildMoodAsset(
+                                          mood,
+                                          size: math.max(emojiSize * 3.0, 44),
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ),
                                   )
                                 : const SizedBox.shrink(),
                           ),
@@ -3444,53 +3479,71 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     required double size,
     BoxFit fit = BoxFit.cover,
   }) {
+    Widget rounded(Widget child) {
+      final radius = (size * 0.18).clamp(6.0, 12.0).toDouble();
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: child,
+      );
+    }
+
     if (mood.customIconBytes != null) {
-      return Image.memory(
-        mood.customIconBytes!,
-        width: size,
-        height: size,
-        fit: fit,
+      return rounded(
+        Image.memory(
+          mood.customIconBytes!,
+          width: size,
+          height: size,
+          fit: fit,
+        ),
       );
     }
     if (mood.customIconBase64 != null && mood.customIconBase64!.isNotEmpty) {
       try {
         final bytes = base64Decode(mood.customIconBase64!);
-        return Image.memory(
-          bytes,
-          width: size,
-          height: size,
-          fit: fit,
+        return rounded(
+          Image.memory(
+            bytes,
+            width: size,
+            height: size,
+            fit: fit,
+          ),
         );
       } catch (_) {}
     }
     final remoteUrl = mood.storageUrl;
     if ((remoteUrl ?? '').isNotEmpty) {
-      return Image.network(
-        remoteUrl!,
-        width: size,
-        height: size,
-        fit: fit,
-        errorBuilder: (_, __, ___) =>
-            Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+      return rounded(
+        Image.network(
+          remoteUrl!,
+          width: size,
+          height: size,
+          fit: fit,
+          errorBuilder: (_, __, ___) =>
+              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+        ),
       );
     }
     final cachedBytes = _globalAssetCache[mood.key];
     if (cachedBytes != null) {
-      return Image.memory(
-        cachedBytes,
-        width: size,
-        height: size,
-        fit: fit == BoxFit.cover ? BoxFit.contain : fit,
+      return rounded(
+        Image.memory(
+          cachedBytes,
+          width: size,
+          height: size,
+          fit: fit == BoxFit.cover ? BoxFit.contain : fit,
+        ),
       );
     }
     if (mood.assetPath.isNotEmpty) {
-      return Image.asset(
-        mood.assetPath,
-        width: size,
-        height: size,
-        fit: fit == BoxFit.cover ? BoxFit.contain : fit,
-        errorBuilder: (_, __, ___) =>
-            Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+      return rounded(
+        Image.asset(
+          mood.assetPath,
+          width: size,
+          height: size,
+          fit: fit == BoxFit.cover ? BoxFit.contain : fit,
+          errorBuilder: (_, __, ___) =>
+              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+        ),
       );
     }
     return Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8));
@@ -5063,53 +5116,71 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
   }
 
   Widget _buildEditorMoodAsset(MoodOption mood, {required double size}) {
+    Widget rounded(Widget child) {
+      final radius = (size * 0.18).clamp(6.0, 12.0).toDouble();
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: child,
+      );
+    }
+
     if (mood.customIconBytes != null) {
-      return Image.memory(
-        mood.customIconBytes!,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
+      return rounded(
+        Image.memory(
+          mood.customIconBytes!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+        ),
       );
     }
     if (mood.customIconBase64 != null && mood.customIconBase64!.isNotEmpty) {
       try {
         final bytes = base64Decode(mood.customIconBase64!);
-        return Image.memory(
-          bytes,
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
+        return rounded(
+          Image.memory(
+            bytes,
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
         );
       } catch (_) {}
     }
     final remoteUrl = mood.storageUrl;
     if ((remoteUrl ?? '').isNotEmpty) {
-      return Image.network(
-        remoteUrl!,
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-            Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+      return rounded(
+        Image.network(
+          remoteUrl!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+        ),
       );
     }
     final cachedBytes = _globalAssetCache[mood.key];
     if (cachedBytes != null) {
-      return Image.memory(
-        cachedBytes,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
+      return rounded(
+        Image.memory(
+          cachedBytes,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+        ),
       );
     }
     if (mood.assetPath.isNotEmpty) {
-      return Image.asset(
-        mood.assetPath,
-        width: size,
-        height: size,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) =>
-            Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+      return rounded(
+        Image.asset(
+          mood.assetPath,
+          width: size,
+          height: size,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) =>
+              Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8)),
+        ),
       );
     }
     return Text(mood.fallbackEmoji, style: TextStyle(fontSize: size * 0.8));
