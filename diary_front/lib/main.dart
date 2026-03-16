@@ -3438,9 +3438,20 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                 ),
               ),
             ),
+          Center(
+            child: Text(
+              '${day.day}',
+              style: GoogleFonts.nanumPenScript(
+                fontSize: dayTextSize,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: hasDiary
+                    ? const Color(0xFF8D8B87)
+                    : const Color(0xFFB3B0AA),
+                ),
+              ),
+            ),
           if (hasDiary && mood != null)
-            Align(
-              alignment: const Alignment(0, -0.15),
+            Center(
               child: SizedBox(
                 width: stickerSize,
                 height: stickerSize,
@@ -3452,18 +3463,6 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                 ),
               ),
             ),
-          Center(
-            child: Text(
-              '${day.day}',
-              style: GoogleFonts.nanumPenScript(
-                fontSize: dayTextSize,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: hasDiary
-                    ? const Color(0xFF8D8B87)
-                    : const Color(0xFFB3B0AA),
-              ),
-            ),
-          ),
         ],
       ),
     );
