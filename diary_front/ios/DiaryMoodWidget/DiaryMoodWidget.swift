@@ -320,32 +320,20 @@ struct DiaryCalendarWidgetEntryView: View {
 
     @ViewBuilder
     private func calendarCell(day: Int) -> some View {
-        let title = entry.monthTitleByDay[day] ?? ""
         if let imageData = entry.monthPhotoByDay[day], let uiImage = UIImage(data: imageData) {
-            VStack(alignment: .leading, spacing: 2) {
-                if !title.isEmpty {
-                    calendarTitleBadge(title)
-                }
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 32, height: 32)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else if let emoji = entry.monthEmojiByDay[day] {
-            VStack(alignment: .leading, spacing: 2) {
-                if !title.isEmpty {
-                    calendarTitleBadge(title)
-                }
-                VStack(spacing: 1) {
-                    Text("\(day)")
-                        .font(.system(size: 8, weight: .regular))
-                        .foregroundStyle(widgetSecondaryTextColor)
-                    MoodIconView(imageData: nil, emoji: emoji, size: 16, emptyText: "", cornerRadius: 0)
-                }
-                .frame(maxWidth: .infinity)
+            VStack(spacing: 1) {
+                Text("\(day)")
+                    .font(.system(size: 8, weight: .regular))
+                    .foregroundStyle(widgetSecondaryTextColor)
+                MoodIconView(imageData: nil, emoji: emoji, size: 16, emptyText: "", cornerRadius: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         } else {
@@ -353,20 +341,6 @@ struct DiaryCalendarWidgetEntryView: View {
                 .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(widgetSecondaryTextColor)
         }
-    }
-
-    private func calendarTitleBadge(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 7, weight: .semibold))
-            .foregroundStyle(widgetPrimaryTextColor)
-            .lineLimit(1)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .frame(maxWidth: 38, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(Color.white)
-            )
     }
 }
 

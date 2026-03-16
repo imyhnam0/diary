@@ -1242,13 +1242,25 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     required String label,
   }) async {
     try {
-      final jpgBytes = _toCustomMoodJpegBytes(bytes);
+      final storageFormat = _detectCustomMoodStorageFormat(bytes);
+      final uploadBytes = storageFormat == _CustomMoodStorageFormat.png
+          ? bytes
+          : _toCustomMoodJpegBytes(bytes);
+      final fileExtension = storageFormat == _CustomMoodStorageFormat.png
+          ? 'png'
+          : 'jpg';
+      final contentType = storageFormat == _CustomMoodStorageFormat.png
+          ? 'image/png'
+          : 'image/jpeg';
       final ref = FirebaseStorage.instance
           .ref()
           .child(widget.userEmail)
           .child('mood_icons')
-          .child('$key.jpg');
-      await ref.putData(jpgBytes, SettableMetadata(contentType: 'image/jpeg'));
+          .child('$key.$fileExtension');
+      await ref.putData(
+        uploadBytes,
+        SettableMetadata(contentType: contentType),
+      );
       final url = await ref.getDownloadURL();
       final storagePath = ref.fullPath;
       final docRef = _userCollection.doc('_custom_moods');
@@ -1285,7 +1297,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       return MoodOption.custom(
         key: key,
         label: label,
-        customIconBytes: jpgBytes,
+        customIconBytes: uploadBytes,
         storageUrl: url,
         storagePath: storagePath,
       );
@@ -2096,18 +2108,15 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                   final mode = await _showIconAddModeSheet();
                                   if (mode == null || !mounted) return;
                                   if (mode == _IconAddMode.draw) {
-                                    final rawCustomBytes =
+                                    final customBytes =
                                         await showDialog<Uint8List>(
                                           context: context,
                                           builder: (_) =>
                                               const _CustomMoodDrawDialog(),
                                         );
-                                    if (rawCustomBytes == null || !mounted) {
+                                    if (customBytes == null || !mounted) {
                                       return;
                                     }
-                                    final customBytes = _toCustomMoodJpegBytes(
-                                      rawCustomBytes,
-                                    );
                                     final key =
                                         'custom_${DateTime.now().millisecondsSinceEpoch}';
                                     final newMood = MoodOption.custom(
@@ -3205,32 +3214,36 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                     ClipRRect(
                       borderRadius: BorderRadius.circular(24),
                       child: Container(
-                        padding: const EdgeInsets.fromLTRB(18, 36, 24, 60),
+                        constraints: const BoxConstraints(minHeight: 420),
+                        padding: const EdgeInsets.fromLTRB(30, 52, 30, 76),
                         decoration: _calendarDecoration(),
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             final cellWidth = constraints.maxWidth / 7;
-                            const headerHeight = 44.0;
-                            const daysOfWeekHeight = 18.0;
+                            const headerHeight = 46.0;
+                            const daysOfWeekHeight = 24.0;
                             final maxRowHeightByHeight =
                                 (constraints.maxHeight -
-                                            headerHeight -
-                                            daysOfWeekHeight) /
-                                        6;
+                                    headerHeight -
+                                    daysOfWeekHeight) /
+                                6;
                             final rowHeight = math.min(
-                              cellWidth.clamp(56.0, 68.0),
-                              maxRowHeightByHeight.clamp(42.0, 68.0),
+                              cellWidth.clamp(48.0, 62.0),
+                              maxRowHeightByHeight.clamp(40.0, 58.0),
                             );
-                            final emojiSize = math.min(rowHeight * 0.28, 18.0);
-                            final dayTextSize = (rowHeight * 0.17).clamp(
-                              11.0,
-                              14.0,
+                            final stickerSize = math.min(
+                              rowHeight * 0.72,
+                              cellWidth * 0.7,
                             );
-                            final titleTextSize = (rowHeight * 0.34).clamp(
-                              18.0,
-                              22.0,
+                            final dayTextSize = (rowHeight * 0.14).clamp(
+                              10.0,
+                              12.0,
                             );
-                            final dowTextSize = (rowHeight * 0.21).clamp(
+                            final titleTextSize = (rowHeight * 0.46).clamp(
+                              20.0,
+                              28.0,
+                            );
+                            final dowTextSize = (rowHeight * 0.22).clamp(
                               12.0,
                               15.0,
                             );
@@ -3250,15 +3263,28 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                 formatButtonVisible: false,
                                 leftChevronVisible: true,
                                 rightChevronVisible: true,
-                                headerPadding: const EdgeInsets.only(bottom: 4),
+                                headerPadding: const EdgeInsets.only(bottom: 8),
+                                leftChevronIcon: const Icon(
+                                  Icons.chevron_left_rounded,
+                                  color: Color(0xFF1C7CA1),
+                                  size: 28,
+                                ),
+                                rightChevronIcon: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Color(0xFF1C7CA1),
+                                  size: 28,
+                                ),
                                 titleTextStyle: GoogleFonts.nanumPenScript(
                                   fontSize: titleTextSize,
                                   fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF202020),
                                 ),
                               ),
                               calendarStyle: const CalendarStyle(
                                 outsideDaysVisible: false,
                                 isTodayHighlighted: false,
+                                cellMargin: EdgeInsets.zero,
+                                cellPadding: EdgeInsets.zero,
                                 defaultDecoration: BoxDecoration(),
                                 weekendDecoration: BoxDecoration(),
                                 selectedDecoration: BoxDecoration(),
@@ -3287,6 +3313,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                       style: GoogleFonts.nanumPenScript(
                                         fontWeight: FontWeight.w700,
                                         fontSize: titleTextSize,
+                                        color: const Color(0xFF202020),
                                       ),
                                     ),
                                   );
@@ -3302,17 +3329,28 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                           'Fri',
                                           'Sat',
                                         ]
-                                      : const ['일', '월', '화', '수', '목', '금', '토'];
+                                      : const [
+                                          '일',
+                                          '월',
+                                          '화',
+                                          '수',
+                                          '목',
+                                          '금',
+                                          '토',
+                                        ];
                                   final label = labels[day.weekday % 7];
                                   return Center(
-                                    child: Text(
-                                      label,
-                                    style: GoogleFonts.nanumPenScript(
-                                      color: const Color(0xFF888888),
-                                      fontSize: dowTextSize,
-                                      fontWeight: FontWeight.w600,
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Text(
+                                        label,
+                                        style: GoogleFonts.nanumPenScript(
+                                          color: const Color(0xFF8E8A83),
+                                          fontSize: dowTextSize,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ),
-                                  ),
                                   );
                                 },
                                 defaultBuilder: (context, day, focusedDay) {
@@ -3320,7 +3358,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                     day: day,
                                     isSelected: false,
                                     diary: diaryByDate[_normalizeDate(day)],
-                                    emojiSize: emojiSize,
+                                    stickerSize: stickerSize,
                                     dayTextSize: dayTextSize,
                                   );
                                 },
@@ -3329,7 +3367,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                     day: day,
                                     isSelected: true,
                                     diary: diaryByDate[_normalizeDate(day)],
-                                    emojiSize: emojiSize,
+                                    stickerSize: stickerSize,
                                     dayTextSize: dayTextSize,
                                   );
                                 },
@@ -3338,7 +3376,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
                                     day: day,
                                     isSelected: isSameDay(day, _selectedDay),
                                     diary: diaryByDate[_normalizeDate(day)],
-                                    emojiSize: emojiSize,
+                                    stickerSize: stickerSize,
                                     dayTextSize: dayTextSize,
                                   );
                                 },
@@ -3379,94 +3417,51 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     required DateTime day,
     required bool isSelected,
     required Map<String, dynamic>? diary,
-    required double emojiSize,
+    required double stickerSize,
     required double dayTextSize,
   }) {
     final mood = diary == null ? null : _resolveMoodFromDiary(diary);
     final hasDiary = diary != null;
-    final title =
-        diary == null ? '' : (diary['title'] ?? '').toString().trim();
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        border: isSelected
-            ? Border.all(color: const Color(0xFF111827), width: 1.1)
-            : null,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+      child: Stack(
+        alignment: Alignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(5, 4, 5, 3),
+          if (isSelected)
+            Positioned.fill(
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: const Color(0x15000000),
+                ),
+              ),
+            ),
+          if (hasDiary && mood != null)
+            Align(
+              alignment: const Alignment(0, -0.15),
+              child: SizedBox(
+                width: stickerSize,
+                height: stickerSize,
+                child: _buildMoodAsset(
+                  mood,
+                  size: stickerSize,
+                  fit: BoxFit.cover,
+                  circular: true,
+                ),
+              ),
+            ),
+          Center(
             child: Text(
               '${day.day}',
               style: GoogleFonts.nanumPenScript(
                 fontSize: dayTextSize,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: hasDiary
-                    ? const Color(0xFF4B5563)
-                    : const Color(0xFF8D8D8D),
+                    ? const Color(0xFF8D8B87)
+                    : const Color(0xFFB3B0AA),
               ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(1.5, 0, 1.5, 4),
-              child: hasDiary
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(7),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          ColoredBox(
-                            color: Colors.white,
-                            child: mood != null
-                                ? Center(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: SizedBox.square(
-                                        dimension: math.max(emojiSize * 3.0, 44),
-                                        child: _buildMoodAsset(
-                                          mood,
-                                          size: math.max(emojiSize * 3.0, 44),
-                                          fit: BoxFit.contain,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                          Positioned(
-                            left: 4,
-                            right: 4,
-                            bottom: 4,
-                            child: Text(
-                              title.isEmpty ? tr('제목 없음', 'Untitled') : title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.left,
-                              style: GoogleFonts.notoSansKr(
-                                fontSize: 8.5,
-                                height: 1.1,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                shadows: const [
-                                  Shadow(
-                                    color: Color(0xCC000000),
-                                    blurRadius: 4,
-                                    offset: Offset(0, 1),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : const SizedBox.shrink(),
             ),
           ),
         ],
@@ -3478,8 +3473,12 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
     MoodOption mood, {
     required double size,
     BoxFit fit = BoxFit.cover,
+    bool circular = false,
   }) {
     Widget rounded(Widget child) {
+      if (circular) {
+        return ClipOval(child: child);
+      }
       final radius = (size * 0.18).clamp(6.0, 12.0).toDouble();
       return ClipRRect(
         borderRadius: BorderRadius.circular(radius),
@@ -3501,12 +3500,7 @@ class _DiaryHomePageState extends State<DiaryHomePage> {
       try {
         final bytes = base64Decode(mood.customIconBase64!);
         return rounded(
-          Image.memory(
-            bytes,
-            width: size,
-            height: size,
-            fit: fit,
-          ),
+          Image.memory(bytes, width: size, height: size, fit: fit),
         );
       } catch (_) {}
     }
@@ -5138,12 +5132,7 @@ class _NewDiaryPageState extends State<NewDiaryPage> {
       try {
         final bytes = base64Decode(mood.customIconBase64!);
         return rounded(
-          Image.memory(
-            bytes,
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-          ),
+          Image.memory(bytes, width: size, height: size, fit: BoxFit.cover),
         );
       } catch (_) {}
     }
@@ -5641,7 +5630,8 @@ class _PhotoMoodCropDialogState extends State<_PhotoMoodCropDialog> {
       final canvas = Canvas(recorder);
       final scale = _outputSize / _cropSize;
       canvas.scale(scale);
-      canvas.clipRect(const Rect.fromLTWH(0, 0, _cropSize, _cropSize));
+      final cropRect = const Rect.fromLTWH(0, 0, _cropSize, _cropSize);
+      canvas.clipPath(Path()..addOval(cropRect.deflate(2)));
       canvas.transform(_controller.value.storage);
       canvas.drawImageRect(
         _image!,
@@ -5707,8 +5697,8 @@ class _PhotoMoodCropDialogState extends State<_PhotoMoodCropDialog> {
             const SizedBox(height: 4),
             Text(
               tr(
-                '사진을 움직이거나 확대해서 정사각형 안에 원하는 부분을 맞춰주세요.',
-                'Move or zoom the photo to fit the part you want inside the square.',
+                '사진을 움직이거나 확대해서 원 안에 원하는 부분을 맞춰주세요.',
+                'Move or zoom the photo to fit the part you want inside the circle.',
               ),
               style: const TextStyle(
                 color: Color(0xFF9CA3AF),
@@ -5743,7 +5733,7 @@ class _PhotoMoodCropDialogState extends State<_PhotoMoodCropDialog> {
                           ),
                           IgnorePointer(
                             child: CustomPaint(
-                              painter: _SquareCropOverlayPainter(),
+                              painter: _CircleCropOverlayPainter(),
                             ),
                           ),
                         ],
@@ -6253,8 +6243,11 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
     final canvas = Canvas(recorder);
     const outSize = 512.0;
     final scale = outSize / _canvasSize;
-    canvas.drawRect(
-      const Rect.fromLTWH(0, 0, outSize, outSize),
+    final rect = const Rect.fromLTWH(0, 0, outSize, outSize);
+    canvas.clipPath(Path()..addOval(rect.deflate(4)));
+    canvas.drawCircle(
+      const Offset(outSize / 2, outSize / 2),
+      (outSize / 2) - 4,
       Paint()..color = Colors.white,
     );
     _SketchPainter.drawStrokes(canvas, _strokes, scale: scale);
@@ -6313,8 +6306,8 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
                   const SizedBox(height: 4),
                   Text(
                     tr(
-                      '정사각형 안에 나만의 기분 아이콘을 그려보세요',
-                      'Draw your own mood icon inside the square',
+                      '원형 아이콘 안에 나만의 기분을 그려보세요',
+                      'Draw your own mood inside the circular icon',
                     ),
                     style: TextStyle(fontSize: 12, color: Color(0xFF9CA3AF)),
                   ),
@@ -6342,10 +6335,9 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
                             height: canvasLength,
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(18),
+                              shape: BoxShape.circle,
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(18),
+                            child: ClipOval(
                               child: Listener(
                                 behavior: HitTestBehavior.opaque,
                                 onPointerDown: _handlePointerDown,
@@ -6368,7 +6360,7 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
                           IgnorePointer(
                             child: CustomPaint(
                               size: Size(canvasLength, canvasLength),
-                              painter: _DashedSquareBorderPainter(),
+                              painter: _DashedCircleBorderPainter(),
                             ),
                           ),
                         ],
@@ -6501,6 +6493,14 @@ class _CustomMoodDrawDialogState extends State<_CustomMoodDrawDialog> {
                               color: Color(0xFF6B7280),
                               fontWeight: FontWeight.w600,
                             ),
+                          ),
+                          const Spacer(),
+                          _StrokeWidthPreview(
+                            width: _eraserMode ? _eraserWidth : _penWidth,
+                            color: _eraserMode
+                                ? const Color(0xFF9CA3AF)
+                                : _penColor,
+                            isEraser: _eraserMode,
                           ),
                         ],
                       ),
@@ -6780,6 +6780,8 @@ class _SketchPainter extends CustomPainter {
 
 enum _PenTexture { solid, soft }
 
+enum _CustomMoodStorageFormat { jpeg, png }
+
 String _textureLabel(_PenTexture texture) {
   switch (texture) {
     case _PenTexture.solid:
@@ -6816,126 +6818,118 @@ Future<List<Map<String, dynamic>>> _listMoodRowsFromStorage(
   }
 }
 
-class _DashedSquareBorderPainter extends CustomPainter {
+class _StrokeWidthPreview extends StatelessWidget {
+  const _StrokeWidthPreview({
+    required this.width,
+    required this.color,
+    required this.isEraser,
+  });
+
+  final double width;
+  final Color color;
+  final bool isEraser;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 96,
+      height: 44,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: CustomPaint(
+        painter: _StrokeWidthPreviewPainter(
+          width: width,
+          color: color,
+          isEraser: isEraser,
+        ),
+      ),
+    );
+  }
+}
+
+class _StrokeWidthPreviewPainter extends CustomPainter {
+  const _StrokeWidthPreviewPainter({
+    required this.width,
+    required this.color,
+    required this.isEraser,
+  });
+
+  final double width;
+  final Color color;
+  final bool isEraser;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final previewStrokeWidth = width.clamp(2.0, 28.0);
+    final verticalInset = (previewStrokeWidth / 2 + 3).clamp(
+      4.0,
+      size.height / 2 - 2,
+    );
+    final startY = size.height - verticalInset - 4;
+    final controlY = verticalInset;
+    final endY = size.height / 2;
+    final linePaint = Paint()
+      ..color = isEraser ? const Color(0xFF9CA3AF) : color
+      ..strokeWidth = previewStrokeWidth
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final path = Path()
+      ..moveTo(size.width * 0.16, startY)
+      ..quadraticBezierTo(
+        size.width * 0.42,
+        controlY,
+        size.width * 0.84,
+        endY,
+      );
+    canvas.drawPath(path, linePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _StrokeWidthPreviewPainter oldDelegate) {
+    return oldDelegate.width != width ||
+        oldDelegate.color != color ||
+        oldDelegate.isEraser != isEraser;
+  }
+}
+
+class _DashedCircleBorderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = const Color(0xFFAAAAAA)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
-    const radius = Radius.circular(18);
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(1, 1, size.width - 2, size.height - 2),
-      radius,
-    );
-    _drawDashedLine(
-      canvas,
-      Offset(rect.left + radius.x, rect.top),
-      Offset(rect.right - radius.x, rect.top),
-      paint,
-    );
-    _drawDashedLine(
-      canvas,
-      Offset(rect.right, rect.top + radius.y),
-      Offset(rect.right, rect.bottom - radius.y),
-      paint,
-    );
-    _drawDashedLine(
-      canvas,
-      Offset(rect.right - radius.x, rect.bottom),
-      Offset(rect.left + radius.x, rect.bottom),
-      paint,
-    );
-    _drawDashedLine(
-      canvas,
-      Offset(rect.left, rect.bottom - radius.y),
-      Offset(rect.left, rect.top + radius.y),
-      paint,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(
-        center: Offset(rect.left + radius.x, rect.top + radius.y),
-        radius: radius.x,
-      ),
-      math.pi,
-      math.pi / 2,
-      false,
-      paint,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(
-        center: Offset(rect.right - radius.x, rect.top + radius.y),
-        radius: radius.x,
-      ),
-      -math.pi / 2,
-      math.pi / 2,
-      false,
-      paint,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(
-        center: Offset(rect.right - radius.x, rect.bottom - radius.y),
-        radius: radius.x,
-      ),
-      0,
-      math.pi / 2,
-      false,
-      paint,
-    );
-    canvas.drawArc(
-      Rect.fromCircle(
-        center: Offset(rect.left + radius.x, rect.bottom - radius.y),
-        radius: radius.x,
-      ),
-      math.pi / 2,
-      math.pi / 2,
-      false,
-      paint,
-    );
+    final rect = Rect.fromLTWH(3, 3, size.width - 6, size.height - 6);
+    const dashArc = math.pi / 26;
+    const gapArc = math.pi / 54;
+    double start = 0;
+    while (start < math.pi * 2) {
+      canvas.drawArc(rect, start, dashArc, false, paint);
+      start += dashArc + gapArc;
+    }
   }
 
   @override
-  bool shouldRepaint(_DashedSquareBorderPainter oldDelegate) => false;
+  bool shouldRepaint(_DashedCircleBorderPainter oldDelegate) => false;
 }
 
-void _drawDashedLine(
-  Canvas canvas,
-  Offset start,
-  Offset end,
-  Paint paint,
-) {
-  const dash = 10.0;
-  const gap = 6.0;
-  final delta = end - start;
-  final distance = delta.distance;
-  if (distance <= 0) return;
-  final direction = delta / distance;
-  double progress = 0;
-  while (progress < distance) {
-    final segmentStart = start + direction * progress;
-    final segmentEnd = start + direction * math.min(progress + dash, distance);
-    canvas.drawLine(segmentStart, segmentEnd, paint);
-    progress += dash + gap;
-  }
-}
-
-class _SquareCropOverlayPainter extends CustomPainter {
+class _CircleCropOverlayPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final cropRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(18),
-    );
+    final cropRect = Rect.fromLTWH(0, 0, size.width, size.height);
     final overlayPath = Path()
       ..fillType = PathFillType.evenOdd
       ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..addRRect(cropRect);
+      ..addOval(cropRect.deflate(2));
     canvas.drawPath(
       overlayPath,
       Paint()..color = Colors.black.withValues(alpha: 0.42),
     );
-    canvas.drawRRect(
-      cropRect,
+    canvas.drawOval(
+      cropRect.deflate(2),
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5
@@ -6981,6 +6975,21 @@ Uint8List _toCustomMoodJpegBytes(Uint8List sourceBytes) {
   } catch (_) {
     return sourceBytes;
   }
+}
+
+_CustomMoodStorageFormat _detectCustomMoodStorageFormat(Uint8List bytes) {
+  if (bytes.length >= 8 &&
+      bytes[0] == 0x89 &&
+      bytes[1] == 0x50 &&
+      bytes[2] == 0x4E &&
+      bytes[3] == 0x47 &&
+      bytes[4] == 0x0D &&
+      bytes[5] == 0x0A &&
+      bytes[6] == 0x1A &&
+      bytes[7] == 0x0A) {
+    return _CustomMoodStorageFormat.png;
+  }
+  return _CustomMoodStorageFormat.jpeg;
 }
 
 BoxDecoration _calendarDecoration() {

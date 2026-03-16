@@ -1,6 +1,6 @@
-"WIDGET_TODAY_NAME" = "오늘의 일기";
-"WIDGET_TODAY_DESCRIPTION" = "오늘 감정 이모티콘을 보여줍니다.";
-"WIDGET_MONTH_NAME" = "이번 달 일기";
-"WIDGET_MONTH_DESCRIPTION" = "이번 달 감정 요약을 보여줍니다.";
+"WIDGET_TODAY_NAME" = "어제의 일기";
+"WIDGET_TODAY_DESCRIPTION" = "어제 감정 이모티콘을 보여줍니다.";
+"WIDGET_MONTH_NAME" = "최근 일기";
+"WIDGET_MONTH_DESCRIPTION" = "최근 감정 이모티콘을 보여줍니다.";
 "WIDGET_CALENDAR_NAME" = "일기 달력";
 "WIDGET_CALENDAR_DESCRIPTION" = "달력에 기록된 감정 이모티콘을 보여줍니다.";
